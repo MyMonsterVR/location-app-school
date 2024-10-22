@@ -24,38 +24,37 @@ export default function Index() {
     const mapRef = useRef(null);
 
     useEffect(() => {
-        (async () => {
-            /* @hide */
-            /* if (Platform.OS === 'android' && !Constants.isDevice) {
-                setErrorMsg(
-                    'Oops, this will not work on Snack in an Android emulator. Try it on your device!'
-                );
-                return;
-            } */
-            /* @end */
-            let { status } = await Location.requestForegroundPermissionsAsync();
-            if (status !== 'granted') {
-                setErrorMsg('Permission to access location was denied');
-                return;
-            }
+        Location.enableNetworkProviderAsync()
+        try {
+            (async () => {
+                let { status } = await Location.requestForegroundPermissionsAsync();
+                if (status !== 'granted') {
+                    setErrorMsg('Permission to access location was denied');
+                    return;
+                }
 
-            let location = await Location.getCurrentPositionAsync({});
-            setLocation(location);
-            if (location?.coords)
-            {
-                const region = {
-                    latitudeDelta:  0.0092,
-                    longitudeDelta: 0.0092,
-                    latitude:       location.coords.latitude,
-                    longitude:      location.coords.longitude,
-                };
+                let location = await Location.getCurrentPositionAsync({});
+                setLocation(location);
+                if (location?.coords)
+                {
+                    const region = {
+                        latitudeDelta:  0.0092,
+                        longitudeDelta: 0.0092,
+                        latitude:       location.coords.latitude,
+                        longitude:      location.coords.longitude,
+                    };
 
-                console.log("latitude: ", region.latitude);
-                console.log("longitude: ", region.longitude);
-                mapRef.current?.animateToRegion(region, 1000);
-            }
-        })();
-      }, []);
+                    console.log("latitude: ", region.latitude);
+                    console.log("longitude: ", region.longitude);
+                    mapRef.current?.animateToRegion(region, 1000);
+                }
+            })();
+        }
+        catch (ex)
+        {
+            console.log(ex)
+        }
+    }, []);
 
     let text = 'Waiting..';
     if (errorMsg)
@@ -76,8 +75,11 @@ export default function Index() {
 
     return (
         <View style={styles.container} provider={PROVIDER_GOOGLE}>
-            <Text>{text}</Text>
-            <MapView ref={mapRef} style={styles.map}></MapView>
+            <MapView
+                ref={mapRef}
+                style={styles.map}
+                showsUserLocation={true}>
+            </MapView>
         </View>
     );
 }
