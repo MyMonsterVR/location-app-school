@@ -5,16 +5,17 @@ import MapView, { LatLng, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Pressable } from 'expo-router/build/views/Pressable';
 
-const destination = { latitude: 56.1629, longitude: 10.2039 };
 const GOOGLE_MAPS_APIKEY = 'AIzaSyDVv71QIEt1ymIvRM-VgiDSg7p1bToQ864';
 
 export default function Index() {
     const [location, setLocation] = useState<CurrentLocation | null>(null);
     const [origin, setOrigin] = useState<OriginLocation | null>(null);
+    const [destination, setDestination] = useState<DestinationLocation | null>(null);
     const [searchText, setSearchText] = useState<string | null>(null);
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const mapRef = useRef<MapView | null>(null);
+
     const mapDarkMode = [ { "elementType": "geometry", "stylers": [ { "color": "#242f3e" } ] }, { "elementType": "labels.text.fill", "stylers": [ { "color": "#746855" } ] }, { "elementType": "labels.text.stroke", "stylers": [ { "color": "#242f3e" } ] }, { "featureType": "administrative.locality", "elementType": "labels.text.fill", "stylers": [ { "color": "#d59563" } ] }, { "featureType": "poi", "elementType": "labels.text.fill", "stylers": [ { "color": "#d59563" } ] }, { "featureType": "poi.park", "elementType": "geometry", "stylers": [ { "color": "#263c3f" } ] }, { "featureType": "poi.park", "elementType": "labels.text.fill", "stylers": [ { "color": "#6b9a76" } ] }, { "featureType": "road", "elementType": "geometry", "stylers": [ { "color": "#38414e" } ] }, { "featureType": "road", "elementType": "geometry.stroke", "stylers": [ { "color": "#212a37" } ] }, { "featureType": "road", "elementType": "labels.text.fill", "stylers": [ { "color": "#9ca5b3" } ] }, { "featureType": "road.highway", "elementType": "geometry", "stylers": [ { "color": "#746855" } ] }, { "featureType": "road.highway", "elementType": "geometry.stroke", "stylers": [ { "color": "#1f2835" } ] }, { "featureType": "road.highway", "elementType": "labels.text.fill", "stylers": [ { "color": "#f3d19c" } ] }, { "featureType": "transit", "elementType": "geometry", "stylers": [ { "color": "#2f3948" } ] }, { "featureType": "transit.station", "elementType": "labels.text.fill", "stylers": [ { "color": "#d59563" } ] }, { "featureType": "water", "elementType": "geometry", "stylers": [ { "color": "#17263c" } ] }, { "featureType": "water", "elementType": "labels.text.fill", "stylers": [ { "color": "#515c6d" } ] }, { "featureType": "water", "elementType": "labels.text.stroke", "stylers": [ { "color": "#17263c" } ] } ]
     const mapTrackMode = [ { "elementType": "geometry", "stylers": [ { "color": "#242f3e" } ] }, { "elementType": "labels.text.fill", "stylers": [ { "color": "#d56363" } ] }, { "elementType": "labels.text.stroke", "stylers": [ { "color": "#242f3e" } ] }, { "featureType": "administrative.locality", "elementType": "labels.text.fill", "stylers": [ { "color": "#d56363" } ] }, { "featureType": "poi", "elementType": "labels.text.fill", "stylers": [ { "color": "#d56363" } ] }, { "featureType": "poi.park", "elementType": "geometry", "stylers": [ { "color": "#263c3f" } ] }, { "featureType": "poi.park", "elementType": "labels.text.fill", "stylers": [ { "color": "#6b9a76" } ] }, { "featureType": "road", "elementType": "geometry", "stylers": [ { "color": "#4C3636"} ] }, { "featureType": "road", "elementType": "geometry.stroke", "stylers": [ { "color": "#212a37" } ] }, { "featureType": "road", "elementType": "labels.text.fill", "stylers": [ { "color": "#9ca5b3" } ] }, { "featureType": "road.highway", "elementType": "geometry", "stylers": [ { "color": "#744040" } ] }, { "featureType": "road.highway", "elementType": "geometry.stroke", "stylers": [ { "color": "#1f2835" } ] }, { "featureType": "road.highway", "elementType": "labels.text.fill", "stylers": [ { "color": "#F39C9C" } ] }, { "featureType": "transit", "elementType": "geometry", "stylers": [ { "color": "#2f3948" } ] }, { "featureType": "transit.station", "elementType": "labels.text.fill", "stylers": [ { "color": "#FF5733" } ] }, { "featureType": "water", "elementType": "geometry", "stylers": [ { "color": "#17263c" } ] }, { "featureType": "water", "elementType": "labels.text.fill", "stylers": [ { "color": "#6D5151" } ] }, { "featureType": "water", "elementType": "labels.text.stroke", "stylers": [ { "color": "#17263c" } ] } ]
 
@@ -42,14 +43,15 @@ export default function Index() {
     };
 
     const selectLocation = (location: LatLng) => {
-        setOrigin(location);
+        setDestination(location);
         setSearchResults([]);
-        mapRef.current?.animateToRegion({
+        /*mapRef.current?.animateToRegion({
             ...location,
             latitudeDelta: 0.0092,
             longitudeDelta: 0.0092,
-        }, 1000);
+        }, 1000);*/
     };
+
     useEffect(() => {
         try {
             (async () => {
@@ -109,13 +111,18 @@ export default function Index() {
                 loadingEnabled={true}
                 provider={PROVIDER_GOOGLE}
                 customMapStyle={mapDarkMode}
+                showsTraffic={true}
             >
-                <MapViewDirections
-                    origin={origin}
-                    destination={destination}
-                    apikey={GOOGLE_MAPS_APIKEY}
-                    mode="DRIVING"
-                />
+                {origin && (
+                    <MapViewDirections
+                        origin={origin}
+                        destination={destination}
+                        apikey={GOOGLE_MAPS_APIKEY}
+                        mode="DRIVING"
+                        strokeWidth={8}
+                        strokeColor="#34a4eb"
+                    />
+                )}
             </MapView>
             <TextInput
                 style={styles.searchInput}
@@ -126,22 +133,24 @@ export default function Index() {
             <Pressable onPress={searchPlaces} style={styles.searchButton}>
                 <Text>Search</Text>
             </Pressable>
-            <FlatList
-                data={searchResults}
-                keyExtractor={(item) => item.place_id}
-                renderItem={({ item }) => (
-                    <TouchableOpacity onPress={() => selectLocation({
-                        latitude: item.geometry.location.lat,
-                        longitude: item.geometry.location.lng,
-                    })}>
-                        <View style={styles.resultItem}>
-                            <Text>{item.name}</Text>
-                            <Text>{item.formatted_address}</Text>
-                        </View>
-                    </TouchableOpacity>
-                )}
-                style={styles.resultsList}
-            />
+            {searchResults.length > 0 && (
+                <FlatList
+                    data={searchResults}
+                    keyExtractor={(item) => item.place_id}
+                    renderItem={({ item }) => (
+                        <TouchableOpacity onPress={() => selectLocation({
+                            latitude: item.geometry.location.lat,
+                            longitude: item.geometry.location.lng,
+                        })}>
+                            <View style={styles.resultItem}>
+                                <Text>{item.name}</Text>
+                                <Text>{item.formatted_address}</Text>
+                            </View>
+                        </TouchableOpacity>
+                    )}
+                    style={styles.resultsList}
+                />
+            )}
         </View>
     );
 }
