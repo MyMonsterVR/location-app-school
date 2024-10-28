@@ -7,7 +7,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 
 const GOOGLE_MAPS_APIKEY = 'AIzaSyDVv71QIEt1ymIvRM-VgiDSg7p1bToQ864';
 
-export default function map() {
+export default function Map() {
     const [location, setLocation] = useState<CurrentLocation | null>(null);
     const [origin, setOrigin] = useState<OriginLocation | null>(null);
     const [destination, setDestination] = useState<DestinationLocation | null>(null);

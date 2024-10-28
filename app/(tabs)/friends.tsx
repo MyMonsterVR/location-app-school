@@ -1,7 +1,7 @@
 import { View, Text } from 'react-native';
 import React from 'react';
 
-const friends = () => {
+const Friends = () => {
     return (
         <View>
             <Text>Friends</Text>
@@ -9,4 +9,4 @@ const friends = () => {
     );
 }
 
-export default friends;
+export default Friends;
