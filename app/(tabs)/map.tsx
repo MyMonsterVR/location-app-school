@@ -4,11 +4,11 @@ import MapViewDirections from 'react-native-maps-directions';
 import MapView, { LatLng, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { setItem } from "@/app/utils/AsyncStorage";
 
 const GOOGLE_MAPS_APIKEY = 'AIzaSyDVv71QIEt1ymIvRM-VgiDSg7p1bToQ864';
 
 export default function Map() {
-    const [location, setLocation] = useState<CurrentLocation | null>(null);
     const [origin, setOrigin] = useState<OriginLocation | null>(null);
     const [destination, setDestination] = useState<DestinationLocation | null>(null);
     const [searchText, setSearchText] = useState<string | null>(null);
@@ -17,6 +17,7 @@ export default function Map() {
     const [isSearchModalVisible, setSearchModalVisible] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const mapRef = useRef<MapView | null>(null);
+    setItem('userId', 1)
 
     const mapDarkMode = [ { "elementType": "geometry", "stylers": [ { "color": "#242f3e" } ] }, { "elementType": "labels.text.fill", "stylers": [ { "color": "#746855" } ] }, { "elementType": "labels.text.stroke", "stylers": [ { "color": "#242f3e" } ] }, { "featureType": "administrative.locality", "elementType": "labels.text.fill", "stylers": [ { "color": "#d59563" } ] }, { "featureType": "poi", "elementType": "labels.text.fill", "stylers": [ { "color": "#d59563" } ] }, { "featureType": "poi.park", "elementType": "geometry", "stylers": [ { "color": "#263c3f" } ] }, { "featureType": "poi.park", "elementType": "labels.text.fill", "stylers": [ { "color": "#6b9a76" } ] }, { "featureType": "road", "elementType": "geometry", "stylers": [ { "color": "#38414e" } ] }, { "featureType": "road", "elementType": "geometry.stroke", "stylers": [ { "color": "#212a37" } ] }, { "featureType": "road", "elementType": "labels.text.fill", "stylers": [ { "color": "#9ca5b3" } ] }, { "featureType": "road.highway", "elementType": "geometry", "stylers": [ { "color": "#746855" } ] }, { "featureType": "road.highway", "elementType": "geometry.stroke", "stylers": [ { "color": "#1f2835" } ] }, { "featureType": "road.highway", "elementType": "labels.text.fill", "stylers": [ { "color": "#f3d19c" } ] }, { "featureType": "transit", "elementType": "geometry", "stylers": [ { "color": "#2f3948" } ] }, { "featureType": "transit.station", "elementType": "labels.text.fill", "stylers": [ { "color": "#d59563" } ] }, { "featureType": "water", "elementType": "geometry", "stylers": [ { "color": "#17263c" } ] }, { "featureType": "water", "elementType": "labels.text.fill", "stylers": [ { "color": "#515c6d" } ] }, { "featureType": "water", "elementType": "labels.text.stroke", "stylers": [ { "color": "#17263c" } ] } ]
     const mapTrackMode = [ { "elementType": "geometry", "stylers": [ { "color": "#242f3e" } ] }, { "elementType": "labels.text.fill", "stylers": [ { "color": "#d56363" } ] }, { "elementType": "labels.text.stroke", "stylers": [ { "color": "#242f3e" } ] }, { "featureType": "administrative.locality", "elementType": "labels.text.fill", "stylers": [ { "color": "#d56363" } ] }, { "featureType": "poi", "elementType": "labels.text.fill", "stylers": [ { "color": "#d56363" } ] }, { "featureType": "poi.park", "elementType": "geometry", "stylers": [ { "color": "#263c3f" } ] }, { "featureType": "poi.park", "elementType": "labels.text.fill", "stylers": [ { "color": "#6b9a76" } ] }, { "featureType": "road", "elementType": "geometry", "stylers": [ { "color": "#4C3636"} ] }, { "featureType": "road", "elementType": "geometry.stroke", "stylers": [ { "color": "#212a37" } ] }, { "featureType": "road", "elementType": "labels.text.fill", "stylers": [ { "color": "#9ca5b3" } ] }, { "featureType": "road.highway", "elementType": "geometry", "stylers": [ { "color": "#744040" } ] }, { "featureType": "road.highway", "elementType": "geometry.stroke", "stylers": [ { "color": "#1f2835" } ] }, { "featureType": "road.highway", "elementType": "labels.text.fill", "stylers": [ { "color": "#F39C9C" } ] }, { "featureType": "transit", "elementType": "geometry", "stylers": [ { "color": "#2f3948" } ] }, { "featureType": "transit.station", "elementType": "labels.text.fill", "stylers": [ { "color": "#FF5733" } ] }, { "featureType": "water", "elementType": "geometry", "stylers": [ { "color": "#17263c" } ] }, { "featureType": "water", "elementType": "labels.text.fill", "stylers": [ { "color": "#6D5151" } ] }, { "featureType": "water", "elementType": "labels.text.stroke", "stylers": [ { "color": "#17263c" } ] } ]
@@ -95,7 +96,6 @@ export default function Map() {
                 }
 
                 let location = await Location.getCurrentPositionAsync({});
-                setLocation(location as unknown as CurrentLocation);
                 if (location?.coords) {
                     Location.watchPositionAsync(
                         {
@@ -104,7 +104,6 @@ export default function Map() {
                             distanceInterval: 50
                         },
                         location => {
-                            setLocation(location as unknown as CurrentLocation);
                             const region = {
                                 latitudeDelta: 0.0092,
                                 longitudeDelta: 0.0092,
@@ -219,7 +218,7 @@ const styles = StyleSheet.create({
     },
     modalContainer: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)', // Dimmed background for a better effect
+        backgroundColor: 'rgba(36, 47, 62, 1)', // TODO: dark mode fixed
         justifyContent: 'flex-end', // Slide-up effect
     },
     modalContent: {
@@ -265,7 +264,7 @@ const styles = StyleSheet.create({
     resultTitle: {
         fontSize: 16,
         fontWeight: '500',
-        color: '#333', // TODO: CHANGE BASED ON THEME COLOR
+        color: '#fff', // TODO: CHANGE BASED ON THEME COLOR
     },
     resultSubtitle: {
         fontSize: 14,
