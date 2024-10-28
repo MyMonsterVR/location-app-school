@@ -6,7 +6,7 @@ import InputText from '@/components/InputText';
 import { getItem } from "@/app/utils/AsyncStorage";
 
 const Friends = () => {
-    const socketio = socketIOClient('http://20.157.195.19:3000');
+    const socketio = socketIOClient('http://20.157.195.19:80');
     const [messages, setMessages] = React.useState<string[]>([]);
 
     useEffect(() => {
