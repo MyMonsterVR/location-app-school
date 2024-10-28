@@ -63,7 +63,7 @@ export default function Map() {
         }
     }, 300);
 
-    const selectLocation = async (placeId) => {
+    const selectLocation = async (placeId: string) => {
         const placeDetailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?placeid=${placeId}&key=${GOOGLE_MAPS_APIKEY}`;
 
         try {
