@@ -4,7 +4,9 @@ import MapViewDirections from 'react-native-maps-directions';
 import MapView, { LatLng, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { setItem } from "@/app/utils/AsyncStorage";
+import {getItem, setItem} from "@/app/utils/AsyncStorage";
+import {mapStyle} from "@/app/utils/utils";
+
 
 const GOOGLE_MAPS_APIKEY = 'AIzaSyDVv71QIEt1ymIvRM-VgiDSg7p1bToQ864';
 
@@ -121,6 +123,21 @@ export default function Map() {
         }
     }, []);
 
+    const [mapTheme, setMapTheme] = useState(null);
+
+    useEffect(() => {
+        (async () => {
+            const style = await mapStyle();
+            if (style.darkMode) {
+                setMapTheme(mapDarkMode);
+            } else if (style.trackMode) {
+                setMapTheme(mapTrackMode);
+            } else {
+                setMapTheme(null);
+            }
+        })();
+    }, []);
+
     let text = 'Waiting...';
     if (errorMsg) {
         text = errorMsg;
@@ -131,6 +148,7 @@ export default function Map() {
         );
     }
 
+
     return (
         <View style={styles.container}>
             <MapView
@@ -140,7 +158,7 @@ export default function Map() {
                 showsMyLocationButton={false}
                 loadingEnabled={true}
                 provider={PROVIDER_GOOGLE}
-                customMapStyle={mapDarkMode}
+                customMapStyle={mapTheme}
                 showsTraffic={true}
             >
                 {origin && (

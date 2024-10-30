@@ -4,8 +4,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {ToggleSwitch} from '@/components/ToggleSwitch';
 import Icon from "react-native-vector-icons/Ionicons";
 
-
-
 const Settings = () => {
     return (
         <SafeAreaView>
@@ -29,7 +27,7 @@ const Settings = () => {
                 <Text style={styles.settingsHeader}>Friends</Text>
                 <View style={styles.settingsButtonView}>
                     <Text style={styles.settingsOptions}>QR Code/link</Text>
-                    <Icon style={styles.settingsButton} name="chevron-forward" size={20} color="black"/>
+                    <Icon style={styles.settingsButton} name="chevron-forward"/>
                 </View>
 
                 <Text style={styles.settingsHeader}>Preferences</Text>

@@ -9,7 +9,13 @@ export function ToggleSwitch({Option}: {Option: string}) {
         setItem(Option, isEnabled);
     }
 
-    console.log(Option)
+    React.useEffect(() => {
+        getItem(Option).then((value) => {
+            setIsEnabled(value);
+        });
+    }, []);
+
+    console.log(Option, isEnabled);
 
     return (
         <Switch style={styles.ToggleButton}
