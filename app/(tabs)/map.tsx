@@ -5,7 +5,6 @@ import MapView, { LatLng, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {getItem, setItem} from "@/app/utils/AsyncStorage";
-import {mapStyle} from "@/app/utils/utils";
 
 
 const GOOGLE_MAPS_APIKEY = 'AIzaSyDVv71QIEt1ymIvRM-VgiDSg7p1bToQ864';
@@ -18,6 +17,9 @@ export default function Map() {
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [isSearchModalVisible, setSearchModalVisible] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [mapTheme, setMapTheme] = useState(null);
+    const [darkModeEnabled, setDarkModeEnabled] = useState(false);
+    const [trackModeEnabled, setTrackModeEnabled] = useState(false);
     const mapRef = useRef<MapView | null>(null);
     setItem('userId', 1)
 
@@ -123,9 +125,26 @@ export default function Map() {
         }
     }, []);
 
-    const [mapTheme, setMapTheme] = useState(null);
+    const handleMapstyle = async () => {
+        const darkMode = await getItem('toggleDarkMode');
+        const trackMode = await getItem('toggleTrackMode');
+
+        if(darkModeEnabled !== darkMode) setDarkModeEnabled(darkMode);
+        if(trackModeEnabled !== trackMode) setTrackModeEnabled(trackMode);
+    }
 
     useEffect(() => {
+        const interval = setInterval(handleMapstyle, 1000)
+
+        return () => clearInterval(interval)
+    }, [darkModeEnabled, trackModeEnabled]);
+
+    useEffect(() => {
+        setMapTheme(trackModeEnabled ? mapTrackMode : darkModeEnabled ? mapDarkMode : [])
+    }, [darkModeEnabled, trackModeEnabled]);
+
+
+    /*useEffect(() => {
         (async () => {
             const style = await mapStyle();
             if (style.darkMode) {
@@ -136,7 +155,7 @@ export default function Map() {
                 setMapTheme(null);
             }
         })();
-    }, []);
+    }, []);*/
 
     let text = 'Waiting...';
     if (errorMsg) {

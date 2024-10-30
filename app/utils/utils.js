@@ -18,15 +18,3 @@ export const isLoggedIn = () => {
 
     return isTokenValid();
 }
-export const mapStyle = () => {
-    async function getStyle() {
-        const darkMode = await getItem('toggleDarkMode');
-        const trackMode = await getItem('toggleTrackMode');
-
-        return {
-            darkMode: darkMode,
-            trackMode: trackMode,
-        };
-    }
-    return getStyle();
-}

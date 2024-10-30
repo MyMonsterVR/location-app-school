@@ -5,17 +5,19 @@ import {getItem, setItem} from "@/app/utils/AsyncStorage";
 export function ToggleSwitch({Option}: {Option: string}) {
     const [isEnabled, setIsEnabled] = React.useState(false);
     const toggle = () => {
-        setIsEnabled(previousState => !previousState);
-        setItem(Option, isEnabled);
-    }
+        setIsEnabled(previousState => {
+            const newValue = !previousState;
+            setItem(Option, newValue); // Use the updated value here
+            return newValue;
+        });
+    };
+
 
     React.useEffect(() => {
         getItem(Option).then((value) => {
             setIsEnabled(value);
         });
     }, []);
-
-    console.log(Option, isEnabled);
 
     return (
         <Switch style={styles.ToggleButton}
