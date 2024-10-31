@@ -1,4 +1,5 @@
-import {View, Text, StyleSheet} from 'react-native';
+import {View, StyleSheet} from 'react-native';
+import { Text } from '~/components/ui/text';
 import React from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {ToggleSwitch} from '@/components/ToggleSwitch';
