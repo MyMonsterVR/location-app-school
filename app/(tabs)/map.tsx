@@ -7,7 +7,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import {getItem, setItem} from "@/app/utils/AsyncStorage";
 
 
-const GOOGLE_MAPS_APIKEY = 'AIzaSyDVv71QIEt1ymIvRM-VgiDSg7p1bToQ864';
+const GOOGLE_MAPS_APIKEY = process.env.EXPO_PUBLIC_GOOGLE_API;
 
 export default function Map() {
     const [origin, setOrigin] = useState<OriginLocation | null>(null);

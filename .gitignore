@@ -12,6 +12,7 @@ web-build/
 .idea/
 android
 ios
+.env
 
 # macOS
 .DS_Store
