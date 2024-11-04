@@ -2,12 +2,13 @@ import React from "react";
 import {StyleSheet, Switch} from "react-native";
 import {getItem, setItem} from "@/app/utils/AsyncStorage";
 
-export function ToggleSwitch({Option}: {Option: string}) {
+export function ToggleSwitch({Option, callback}: {Option: string, callback: () => boolean}) {
     const [isEnabled, setIsEnabled] = React.useState(false);
     const toggle = () => {
         setIsEnabled(previousState => {
             const newValue = !previousState;
             setItem(Option, newValue); // Use the updated value here
+            callback?.(newValue);
             return newValue;
         });
     };

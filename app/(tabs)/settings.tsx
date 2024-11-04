@@ -4,8 +4,13 @@ import React from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {ToggleSwitch} from '@/components/ToggleSwitch';
 import Icon from "react-native-vector-icons/Ionicons";
+import {getItem, setItem} from "@/app/utils/AsyncStorage";
+import {useColorScheme} from "@/lib/useColorScheme";
+import {SplashScreen} from "expo-router";
 
 const Settings = () => {
+    const { colorScheme, setColorScheme, isDarkColorScheme } = useColorScheme();
+
     return (
         <SafeAreaView>
             <View>
@@ -34,7 +39,7 @@ const Settings = () => {
                 <Text style={styles.settingsHeader}>Preferences</Text>
                 <View style={styles.settingsButtonView}>
                     <Text style={styles.settingsOptions}>Light / Dark mode</Text>
-                    <ToggleSwitch Option={"toggleDarkMode"}/>
+                    <ToggleSwitch Option={"toggleDarkMode"} callback={(isDarkMode) => setColorScheme(isDarkMode === true ? 'dark' : 'light')}/>
                 </View>
                 <View style = {styles.lineStyle} />
                 <View style={styles.settingsButtonView}>
