@@ -13,7 +13,6 @@ export function ToggleSwitch({Option, callback}: {Option: string, callback: () =
         });
     };
 
-
     React.useEffect(() => {
         getItem(Option).then((value) => {
             setIsEnabled(value);

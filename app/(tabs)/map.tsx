@@ -206,7 +206,6 @@ export default function Map() {
                         placeholderTextColor="#666"
                         onChangeText={setSearchText}
                     />
-
                     <FlatList
                         data={searchResults}
                         keyExtractor={(item) => item.place_id}
