@@ -55,7 +55,9 @@
     "socket.io-client": "^4.8.1",
     "tailwind-merge": "^2.5.4",
     "tailwindcss": "^3.4.14",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.49.0",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

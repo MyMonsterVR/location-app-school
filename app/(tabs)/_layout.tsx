@@ -56,8 +56,8 @@ export default () => {
         <ThemeProvider value={isDarkColorScheme ? DARK_THEME : LIGHT_THEME}>
             <Tabs screenOptions={{
                 headerShown: false,
-                tabBarInactiveBackgroundColor: 'hsl(240,4%,14%)',
-                tabBarActiveBackgroundColor: 'hsl(240,5%,22%)',
+                tabBarInactiveBackgroundColor: isDarkColorScheme ? 'hsl(240,4%,14%)' : 'hsl(0,3%,94%)',
+                tabBarActiveBackgroundColor: isDarkColorScheme ? 'hsl(240,5%,22%)' : 'hsl(0,0%,100%)',
             }}>
                 <Tabs.Screen name="friends" options={{
                     title: 'Friends',

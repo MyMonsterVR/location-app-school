@@ -1,6 +1,6 @@
-import { ScrollView, Pressable } from 'react-native';
+import { ScrollView, Pressable, TextInput, View, Button } from 'react-native';
 import { Text } from '~/components/ui/text';
-import React, {useEffect, useRef, useState} from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import faye from 'faye';
 import InputText from '@/components/InputText';
@@ -15,108 +15,82 @@ import {
     CardTitle,
 } from '~/components/ui/card';
 
+const ROOM_ID = 'room1'; // Room name
+const SERVER_URL = 'http://20.157.195.19'; // Your backend URL
+
 const Friends = () => {
-    const [messages, setMessages] = useState<string[]>([]);
-    const [error, setError] = useState<string | null>(null);
-    const [retryCount, setRetryCount] = useState<number>(0);
-    const isConnected = useRef(false);
-
-    const fayeClient = new faye.Client('http://20.157.195.19/faye', {
-        timeout: 120,
-        interval: 10,
-    });
-    const CHANNEL_ID = "test_channel";
-
-    const MAX_RETRIES = 5;
-    const RETRY_DELAY = 5000; // 5 seconds
-
-    const subscribeToChannel = (retry = 0) => {
-        const subscription = fayeClient.subscribe(`/messages/${CHANNEL_ID}`, (data: any) => {
-            console.log("Received message:", data);
-            setMessages((prevMessages) => [...prevMessages, data.message]);
-        });
-
-        subscription.then(
-            () => {
-                console.log(`Successfully subscribed to /messages/${CHANNEL_ID}`);
-            },
-            (error: any) => {
-                console.error(`Failed to subscribe: ${error.message}`);
-                setError(`Subscription failed: ${error.message}`);
-                if (retry < MAX_RETRIES) {
-                    setTimeout(() => subscribeToChannel(retry + 1), RETRY_DELAY);
-                } else {
-                    console.error('Max subscription retries reached.');
-                }
-            }
-        );
-    };
+    const [messages, setMessages] = useState([]);
+    const [error, setError] = useState(null);
+    const [retryCount, setRetryCount] = useState(0);
+    const [message, setMessage] = useState('');
+    const [userID, setUserID] = useState(null);
+    let ws = useRef<WebSocket|null>(null).current;
 
     useEffect(() => {
-        const handleConnection = () => {
-            if (!isConnected.current) {
-                console.log('Connected to Faye server');
-                setError(null)
-                subscribeToChannel();
-                setRetryCount(0); // Reset retry count on successful connection
-                isConnected.current = true;
-            }
+        const getUserId = async () => {
+            const userId = await getItem('userId');
+            setUserID(userId);
+        };
+        getUserId();
+
+        // Connect to WebSocket server
+        ws = new WebSocket(`${SERVER_URL}:8080/chat`);
+
+        ws.onopen = () => {
+            console.log('Connected to WebSocket server');
+            // Join the room
+            ws.send(JSON.stringify({ type: 'join', room: ROOM_ID, userId: userID ?? 0 }));
         };
 
-        const handleDisconnection = () => {
-            if (isConnected.current) {
-                console.log('Disconnected from Faye server, attempting to reconnect...');
-                isConnected.current = false;
-                if (retryCount < MAX_RETRIES) {
-                    setTimeout(() => {
-                        fayeClient.connect();
-                        setRetryCount(retryCount + 1);
-                    }, RETRY_DELAY);
-                } else {
-                    console.error('Max retries reached. Could not reconnect to Faye server.');
-                    setError('Max retries reached. Could not reconnect to Faye server.');
-                }
+        ws.onmessage = (e) => {
+            const data = JSON.parse(e.data);
+            if (data.type === 'history') {
+                setMessages(data.messages); // Fetch history on connect
+            } else if (data.type === 'message') {
+                setMessages((prevMessages) => [...prevMessages, data]);
             }
         };
-
-        fayeClient.bind('transport:up', handleConnection);
-        fayeClient.bind('transport:down', handleDisconnection);
-        fayeClient.unsubscribe(`/messages/${CHANNEL_ID}`);
-        fayeClient.connect();
 
         return () => {
-            fayeClient.unbind('transport:up', handleConnection);
-            fayeClient.unbind('transport:down', handleDisconnection);
-            fayeClient.disconnect();
+            if (ws) ws.close();
         };
-    }, [retryCount]);
+    }, []);
 
-    const addMessage = async (chat: string) => {
-        const newChat = {
-            userId: await getItem('userId') ?? 0,
-            message: chat,
-            roomId: CHANNEL_ID
-        };
+    const sendMessage = () => {
+        if (message.trim() === '') return;
 
-        fetch('http://20.157.195.19:80/send', {
+        // Send message to backend via HTTP API
+        fetch(`${SERVER_URL}:80/send`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(newChat),
+            body: JSON.stringify({
+                room: ROOM_ID,
+                userId: userID ?? 0,
+                text: message,
+            }),
         })
-            .then(response => response.json())
-            .then(data => {
-                console.log(data);
+            .then((response) => response.json())
+            .then((data) => {
+                console.log('Message sent successfully:', data);
+                // Optionally, update the local state immediately
+                setMessages((prevMessages) => [
+                    ...prevMessages,
+                    { userId: userID ?? 0, text: message, type: 'message' },
+                ]);
+                setMessage(''); // Clear input after sending
             })
             .catch((error) => {
-                console.error('Error:', error);
+                console.error('Error sending message:', error);
             });
     };
 
-    const messagesList = messages.map((data, index) => {
-        return <Text className='text-white dark:text-white' key={index}>{data.message}</Text>;
-    });
+    const messagesList = messages.map((data, index) => (
+        <Text key={index} className='text-white dark:text-white'>
+            {data.userId}: {data.text}
+        </Text>
+    ));
 
     return (
         <SafeAreaView>
@@ -131,15 +105,34 @@ const Friends = () => {
                             <Text>{error}</Text>
                         </CardContent>
                         <CardFooter>
-                            <Pressable className="bg-blue-600 rounded p-4 hover:bg-blue-400" onPress={() => {setRetryCount(0); fayeClient.connect(); setError(null)}}>
+                            <Pressable className="bg-blue-600 rounded p-4 hover:bg-blue-400" onPress={() => {setRetryCount(0); setError(null)}}>
                                 <Text>Retry</Text>
                             </Pressable>
                         </CardFooter>
                     </Card>
                 )}
+
                 <Text>Friends</Text>
                 {messagesList}
-                <InputText addMessage={addMessage} />
+
+                {/* Input Text */}
+                <TextInput
+                    placeholder="Type a message"
+                    value={message}
+                    onChangeText={setMessage}
+                    style={{
+                        borderWidth: 1,
+                        margin: 10,
+                        padding: 10,
+                        backgroundColor: '#fff',
+                        borderRadius: 5,
+                    }}
+                />
+
+                {/* Send Button */}
+                <Pressable onPress={sendMessage} style={{ backgroundColor: '#4CAF50', padding: 10, margin: 10, borderRadius: 5 }}>
+                    <Text style={{ color: 'white', textAlign: 'center' }}>Send</Text>
+                </Pressable>
             </ScrollView>
         </SafeAreaView>
     );
