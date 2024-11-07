@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { ScrollView, Pressable, TextInput, StyleSheet, View, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getItem } from "@/app/utils/AsyncStorage";
 import Icon from "react-native-vector-icons/Ionicons";
 import { Text } from '~/components/ui/text';
+import { useAuth } from '@clerk/clerk-expo'
 
 const ROOM_ID = 'room1'; // Room name
 const SERVER_URL = 'http://20.157.195.19';
@@ -25,23 +25,16 @@ interface Message {
 const Friends: React.FC = () => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [message, setMessage] = useState<string>('');
-    const [friends, setFriends] = useState<User[]>([{ username: 'test1', userID: 50 }, { username: 'test2', userID: 51 }]);
+    const [friends, setFriends] = useState<User[]>([{ username: 'willer fake', userId: 'user_2oWHzUce33wlLHl4taHPaYpeIYn' }, { username: 'test2', userId: 51 }]);
     const [modalVisible, setModalVisible] = useState<boolean>(false);
-    const [userID, setUserID] = useState<number | null>(null);
+    const { userId } = useAuth()
+
+    console.log(userId)
 
     let ws = useRef<WebSocket | null>(null).current;
 
     useEffect(() => {
-        const getUserData = async () => {
-            const userId = await getItem('userId');
-            setUserID(userId);
-        };
-
-        getUserData();
-    }, []); // Fetch the user ID only once when the component mounts
-
-    useEffect(() => {
-        if (userID === null) return; // Wait until userID is available
+        if (userId === null) return; // Wait until userID is available
 
         // WebSocket connection
         ws = new WebSocket(`${SERVER_URL}:8080/chat`);
@@ -49,7 +42,7 @@ const Friends: React.FC = () => {
         ws.onopen = () => {
             console.log('Connected to WebSocket server');
             // Join the room only after userID is available
-            ws.send(JSON.stringify({ type: 'join', room: ROOM_ID, userId: userID }));
+            ws.send(JSON.stringify({ type: 'join', room: ROOM_ID, userId: userId }));
         };
 
         ws.onmessage = (e) => {
@@ -66,7 +59,7 @@ const Friends: React.FC = () => {
         return () => {
             if (ws) ws.close();
         };
-    }, [userID]); // WebSocket should only open once userID is available
+    }, [userId]); // WebSocket should only open once userID is available
 
     const scrollViewRef = useRef<ScrollView | null>(null);
 
@@ -89,7 +82,7 @@ const Friends: React.FC = () => {
             },
             body: JSON.stringify({
                 room: ROOM_ID,
-                userId: userID ?? 0, // Make sure userId is sent
+                userId: userId ?? 0, // Make sure userId is sent
                 text: message,
             }),
         })
@@ -99,7 +92,7 @@ const Friends: React.FC = () => {
                 // Add message to state, and mark it as sent by client
                 setMessages((prevMessages) => [
                     ...prevMessages,
-                    { userId: userID ?? 0, text: message, type: 'message', sentByClient: true },
+                    { userId: userId ?? 0, text: message, type: 'message', sentByClient: true },
                 ]);
                 setMessage(''); // Clear input after sending
             })
@@ -141,16 +134,16 @@ const Friends: React.FC = () => {
                                         key={index}
                                         style={[
                                             styles.messageContainer,
-                                            data.userId === userID ? styles.userMessage : styles.otherUserMessage
+                                            data.userId === userId ? styles.userMessage : styles.otherUserMessage
                                         ]}
                                     >
-                                        {data.userId !== userID && showUsername && (
+                                        {data.userId !== userId && showUsername && (
                                             <View style={styles.messageHeader}>
                                                 <Text style={styles.username}>{data.username || "Unknown"}</Text>
                                             </View>
                                         )}
 
-                                        {data.userId === userID && showUsername && (
+                                        {data.userId === userId && showUsername && (
                                             <View style={styles.messageHeaderRight}>
                                                 <Text style={styles.username}>{data.username || "Me"}</Text>
                                             </View>
