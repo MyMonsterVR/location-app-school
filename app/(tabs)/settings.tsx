@@ -1,5 +1,5 @@
 import {View, StyleSheet, Modal} from 'react-native';
-import { Text } from '~/components/ui/text';
+import { Text } from '@/components/ui/text';
 import React from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {ToggleSwitch} from '@/components/ToggleSwitch';
@@ -8,6 +8,8 @@ import { TouchableOpacity } from 'react-native';
 import {GestureHandlerRootView} from "react-native-gesture-handler";
 import { useState, useEffect } from 'react';
 import {useColorScheme} from "@/lib/useColorScheme";
+import {SignOutButton} from "@clerk/clerk-react";
+import {useAuth} from '@clerk/clerk-expo'
 
 const Settings = () => {
     const { colorScheme, setColorScheme, isDarkColorScheme } = useColorScheme();
@@ -16,6 +18,15 @@ const Settings = () => {
     const [IsDeleteAccountModalVisible, setIsDeleteAccountModalVisible] = useState(false);
     const [IsResetPasswordModalVisible, setIsResetPasswordModalVisible] = useState(false);
     const [IsChangeUsernameModalVisible, setIsChangeUsernameModalVisible] = useState(false);
+
+    const { getToken, signOut } = useAuth();
+    const onSignOutPress = async () => {
+        try {
+            await signOut();
+        } catch (err: any) {
+        }
+    };
+
 
     console.log(isQRCodeModalVisible);
 
@@ -68,6 +79,12 @@ const Settings = () => {
                             </TouchableOpacity>
                         </View>
                     </Modal>
+
+                    <View style = {styles.lineStyle} />
+                    <TouchableOpacity style={styles.settingsButtonView} onPress={() => onSignOutPress()}>
+                        <Text style={styles.settingsOptions}>Sign Out</Text>
+                        <Icon style={styles.settingsButton} name="chevron-forward" size={20} color="black"/>
+                    </TouchableOpacity>
 
                     <Text style={styles.settingsHeader}>Friends</Text>
                     <TouchableOpacity style={styles.settingsButtonView} onPress={() => setIsQRCodeModalVisible(true)}>

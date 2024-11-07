@@ -1,6 +1,6 @@
 import '@/global.css';
-import { NAV_THEME } from '~/lib/constants';
-import { useColorScheme } from '~/lib/useColorScheme';
+import { NAV_THEME } from '@/lib/constants';
+import { useColorScheme } from '@/lib/useColorScheme';
 import {SplashScreen, Tabs} from 'expo-router';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import React from "react";
