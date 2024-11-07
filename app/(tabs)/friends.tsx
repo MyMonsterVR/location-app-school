@@ -29,8 +29,6 @@ const Friends: React.FC = () => {
     const [modalVisible, setModalVisible] = useState<boolean>(false);
     const { userId } = useAuth()
 
-    console.log(userId)
-
     let ws = useRef<WebSocket | null>(null).current;
 
     useEffect(() => {
