@@ -3,44 +3,59 @@ import { ScrollView, Pressable, TextInput, StyleSheet, View, Modal } from 'react
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from "react-native-vector-icons/Ionicons";
 import { Text } from '~/components/ui/text';
-import { useAuth } from '@clerk/clerk-expo'
+import { useAuth } from '@clerk/clerk-expo';
 
-const ROOM_ID = 'room1'; // Room name
 const SERVER_URL = 'http://20.157.195.19';
 
 // Define types for message and user data
 interface User {
     username: string;
-    userID: number;
+    userId: string;  // User ID should be a string (could be numeric or UUID)
 }
 
 interface Message {
-    userId: number;
+    userId: string;
     text: string;
     type: string;
     username?: string;
-    sentByClient?: boolean; // Added flag to differentiate client messages
+    sentByClient?: boolean; // Flag to differentiate client messages
 }
+
+// Utility function to create a room ID dynamically
+const createRoomId = (userIds: string[]): string => {
+    // Sort user IDs to ensure consistent room ID generation
+    const sortedUserIds = userIds.sort();
+    return `room-${sortedUserIds.join('-')}`;
+};
 
 const Friends: React.FC = () => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [message, setMessage] = useState<string>('');
-    const [friends, setFriends] = useState<User[]>([{ username: 'willer fake', userId: 'user_2oWHzUce33wlLHl4taHPaYpeIYn' }, { username: 'test2', userId: 51 }]);
+    const [friends, setFriends] = useState<User[]>([
+        { username: 'willer fake', userId: 'user_2oWHzUce33wlLHl4taHPaYpeIYn' },
+        { username: 'raller fake', userId: 'user_2oWWxEKyYTXW1HD21yPggkAlYjx' },
+        { username: 'test3', userId: 'user3' },
+    ]);
     const [modalVisible, setModalVisible] = useState<boolean>(false);
-    const { userId } = useAuth()
+    const [roomId, setRoomId] = useState<string>('');
+    const { userId } = useAuth();  // Assuming Clerk's useAuth hook provides the current user ID
 
     let ws = useRef<WebSocket | null>(null).current;
 
-    useEffect(() => {
-        if (userId === null) return; // Wait until userID is available
+    console.log(userId)
 
-        // WebSocket connection
-        ws = new WebSocket(`${SERVER_URL}:8080/chat`);
+    useEffect(() => {
+        if (!userId || !roomId) return; // Wait until userId and roomId are available
+
+        // Initialize WebSocket connection if it's not already established
+        if (!ws) {
+            ws = new WebSocket(`${SERVER_URL}:8080/chat`);
+        }
 
         ws.onopen = () => {
             console.log('Connected to WebSocket server');
-            // Join the room only after userID is available
-            ws.send(JSON.stringify({ type: 'join', room: ROOM_ID, userId: userId }));
+            // Join the room based on the dynamic roomId and userId
+            ws.send(JSON.stringify({ type: 'join', room: roomId, userId }));
         };
 
         ws.onmessage = (e) => {
@@ -48,16 +63,15 @@ const Friends: React.FC = () => {
             if (data.type === 'history') {
                 setMessages(data.messages); // Fetch history on connect
             } else if (data.type === 'message' && data.sentByClient !== true) {
-                // Only add messages that are NOT sent by the client
                 setMessages((prevMessages) => [...prevMessages, data]);
             }
         };
 
-
         return () => {
-            if (ws) ws.close();
+            // Optionally close WebSocket connection when the component is unmounted or roomId changes
+            // ws.close();
         };
-    }, [userId]); // WebSocket should only open once userID is available
+    }, [userId, roomId]); // Reconnect when userId or roomId changes
 
     const scrollViewRef = useRef<ScrollView | null>(null);
 
@@ -65,32 +79,43 @@ const Friends: React.FC = () => {
         if (scrollViewRef.current) {
             scrollViewRef.current.scrollToEnd({ animated: true });
         }
-    }, [messages]); // This will scroll to the bottom whenever the messages change
+    }, [messages]); // This will scroll to the bottom whenever messages change
 
+    // Handle the room selection (either one-on-one or group chat)
+    const onSelectChat = (selectedUsers: User[]) => {
+        // Create room ID based on the selected users
+        const userIds = selectedUsers.map(user => user.userId);
+        if (userId && !userIds.includes(userId)) {
+            userIds.push(userId);  // Ensure the current user is included in the room
+        }
 
-    // Send message to backend
+        const newRoomId = createRoomId(userIds);
+        setRoomId(newRoomId);
+        setModalVisible(true);
+    };
+
+    // Send a message to the backend and update state
     const sendMessage = () => {
-        if (message.trim() === '') return;
+        if (!message.trim()) return;
 
-        // Send message to backend via HTTP API
+        // Send message via HTTP request
         fetch(`${SERVER_URL}/send`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                room: ROOM_ID,
-                userId: userId ?? 0, // Make sure userId is sent
+                room: roomId,
+                userId: userId ?? '', // Ensure userId is included
                 text: message,
             }),
         })
             .then((response) => response.json())
             .then((data) => {
-                console.log('Message sent successfully:', data);
-                // Add message to state, and mark it as sent by client
+                console.log('Message sent:', data);
                 setMessages((prevMessages) => [
                     ...prevMessages,
-                    { userId: userId ?? 0, text: message, type: 'message', sentByClient: true },
+                    { userId: userId ?? '', text: message, type: 'message', sentByClient: true },
                 ]);
                 setMessage(''); // Clear input after sending
             })
@@ -99,13 +124,12 @@ const Friends: React.FC = () => {
             });
     };
 
-
     return (
         <SafeAreaView style={styles.container}>
             <ScrollView contentContainerStyle={styles.friendsList}>
                 <Text style={styles.pageTitle}>Friends</Text>
                 {friends.map((friend, index) => (
-                    <Pressable key={index} onPress={() => setModalVisible(true)}>
+                    <Pressable key={index} onPress={() => onSelectChat([friend])}>
                         <Text style={styles.friendItem}>{friend.username}</Text>
                     </Pressable>
                 ))}
@@ -119,7 +143,7 @@ const Friends: React.FC = () => {
                         <Pressable onPress={() => setModalVisible(false)}>
                             <Icon name="arrow-back" size={24} color="#fff" />
                         </Pressable>
-                        <Text style={styles.navbarTitle}>Friend Name</Text>
+                        <Text style={styles.navbarTitle}>Chat</Text>
                     </View>
 
                     {/* Chat Area */}
@@ -137,13 +161,13 @@ const Friends: React.FC = () => {
                                     >
                                         {data.userId !== userId && showUsername && (
                                             <View style={styles.messageHeader}>
-                                                <Text style={styles.username}>{data.username || "Unknown"}</Text>
+                                                <Text style={styles.username}>{data.username || 'Unknown'}</Text>
                                             </View>
                                         )}
 
                                         {data.userId === userId && showUsername && (
                                             <View style={styles.messageHeaderRight}>
-                                                <Text style={styles.username}>{data.username || "Me"}</Text>
+                                                <Text style={styles.username}>{data.username || 'Me'}</Text>
                                             </View>
                                         )}
 
@@ -174,7 +198,7 @@ const Friends: React.FC = () => {
     );
 };
 
-// Provided Styles
+// Styles for the app
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -220,7 +244,7 @@ const styles = StyleSheet.create({
         padding: 10,
     },
     messagesContainer: {
-        paddingBottom: 60, // To make room for the input area
+        paddingBottom: 60, // Space for input area
     },
     messageContainer: {
         maxWidth: '75%',
@@ -243,12 +267,12 @@ const styles = StyleSheet.create({
     messageHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 8, // Space between icon and message
+        marginBottom: 8,
     },
     messageHeaderRight: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 8, // Space between icon and message
+        marginBottom: 8,
         justifyContent: 'flex-end',
     },
     username: {
