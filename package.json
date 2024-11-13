@@ -10,7 +10,8 @@
     "web": "expo start --web",
     "test": "jest --watchAll",
     "lint": "expo lint",
-    "build": "expo run:android --variant release"
+    "build": "expo run:android --variant release",
+    "build-dev": "expo run:android"
   },
   "jest": {
     "preset": "jest-expo"
@@ -22,6 +23,7 @@
     "@react-navigation/native": "^6.0.2",
     "@rn-primitives/slot": "^1.1.0",
     "@rn-primitives/types": "^1.1.0",
+    "axios": "^1.7.7",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "expo": "^51.0.38",
@@ -60,7 +62,8 @@
     "tailwindcss": "^3.4.14",
     "tailwindcss-animate": "^1.0.7",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.49.0",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "expo-image": "~1.13.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
