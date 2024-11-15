@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
         position: 'absolute',
         bottom: 30,
         right: 20, // Moved to the right side
-        backgroundColor: '#34a4eb',
+        backgroundColor: '#0086d0',
         padding: 15,
         borderRadius: 50,
         shadowColor: "#000",
@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
     modalSearchButton: {
         borderRadius: 10,
         margin: 10,
-        backgroundColor: '#34a4eb', // Change this color to match your theme
+        backgroundColor: '#0086d0', // Change this color to match your theme
         height: 45,
         justifyContent: 'center',
         alignItems: 'center',
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     goBackButton: {
         alignSelf: 'center',
         marginBottom: 10,
-        backgroundColor: '#34a4eb',
+        backgroundColor: '#0086d0',
         padding: 10,
         borderRadius: 30,
         elevation: 5,
