@@ -5,8 +5,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Text } from '~/components/ui/text';
 import { useAuth, useUser } from '@clerk/clerk-expo';
+import ProfilePicture from "@/components/ProfilePicture";
 
-const SERVER_URL = 'http://20.157.195.19';
+const SERVER_URL = `http://${process.env.EXPO_PUBLIC_SERVER_URL}`;
 
 // Define types for message and user data
 interface User {
@@ -34,7 +35,6 @@ const Friends: React.FC = () => {
     const [friends, setFriends] = useState<User[]>([
         { username: 'willer fake', userId: 'user_2oWHzUce33wlLHl4taHPaYpeIYn' },
         { username: 'raller fake', userId: 'user_2oWWxEKyYTXW1HD21yPggkAlYjx' },
-        { username: 'test3', userId: 'user3' },
     ]);
     const [gifSearch, setGifSearch] = useState<string>('');
     const [categories, setCategories] = useState<any[]>([]);
@@ -210,13 +210,44 @@ const Friends: React.FC = () => {
         closeGifModal()
     };
 
+    // Helper function to get the chat title (friend's name or group name)
+    const getChatTitle = () => {
+        // Split the room ID into its user IDs
+        const participantUserIds = roomId.split('-').slice(1);  // Exclude the first 'room' part
+
+        // Check if it's a one-on-one or group chat
+        if (participantUserIds.length === 1) {
+            // One-on-one chat: Find the friend's username (exclude user's own ID)
+            const friend = friends.find(friend => friend.userId === participantUserIds[0]);
+            return friend ? friend.username : 'Unknown Friend';
+        } else {
+            // Group chat: Exclude the user's own ID and show the other participants' names
+            const otherParticipants = friends.filter(friend =>
+                participantUserIds.includes(friend.userId) && friend.userId !== userId
+            );
+
+            // If there are other participants, show their names (e.g., "Alice, Bob, and 3 others")
+            const participantNames = otherParticipants.map(friend => friend.username);
+
+            if (participantNames.length === 1) {
+                return participantNames[0]; // Only one other participant
+            } else if (participantNames.length > 1) {
+                return `${participantNames.slice(0, 2).join(', ')} and ${participantNames.length - 2} others`; // Show the first two names and the count of others
+            } else {
+                return 'Group Chat'; // Default if no participants found
+            }
+        }
+    };
+
+
     return (
         <SafeAreaView style={styles.container}>
             <ScrollView contentContainerStyle={styles.friendsList}>
                 <Text style={styles.pageTitle}>Friends</Text>
                 {friends.map((friend, index) => (
-                    <Pressable key={index} onPress={() => onSelectChat([friend])}>
-                        <Text style={styles.friendItem}>{friend.username}</Text>
+                    <Pressable key={index} onPress={() => onSelectChat([friend])} style={styles.friendItemContainer}>
+                        <ProfilePicture userId={friend.userId} styling={styles.friendProfilePicture} />
+                        <Text style={styles.friendUsername}>{friend.username}</Text>
                     </Pressable>
                 ))}
             </ScrollView>
@@ -225,10 +256,24 @@ const Friends: React.FC = () => {
             <Modal visible={modalVisible} animationType="slide">
                 <View style={styles.modalContainer}>
                     <View style={styles.navbar}>
+                        {/* Back Button */}
                         <Pressable onPress={() => setModalVisible(false)}>
                             <Icon name="arrow-back" size={24} color="#fff" />
                         </Pressable>
-                        <Text style={styles.navbarTitle}>Chat</Text>
+
+                        {/* Profile Picture and Username */}
+                        <View style={styles.friendInfoContainer}>
+                            {/* Profile Picture */}
+                            <ProfilePicture userId={user?.userId ?? ''} style={styles.profileAvatar} />
+
+                            {/* Friend's Name */}
+                            <Text style={styles.friendUsername}>{getChatTitle()}</Text>
+                        </View>
+
+                        {/* Optional Settings Button */}
+                        <Pressable onPress={() => console.log("Settings")}>
+                            <Icon name="settings" size={24} color="#fff" />
+                        </Pressable>
                     </View>
 
                     {/* Chat Area */}
@@ -259,12 +304,15 @@ const Friends: React.FC = () => {
                                 );
                             }}
                             contentContainerStyle={styles.messagesContainer}
-                            onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: false })}
+                            onContentSizeChange={() => {
+                                if (scrollViewRef.current) {
+                                    scrollViewRef.current.scrollToEnd({ animated: true });
+                                }
+                            }}
                         />
-
                     </View>
 
-                    {/* Message Input with Send Button */}
+                    {/* Message Input */}
                     <View style={styles.inputContainer}>
                         <Pressable onPress={() => setIsGifModalVisible(true)} style={styles.gifButton}>
                             <Icon name="image" size={24} color="#fff" />
@@ -343,11 +391,9 @@ const Friends: React.FC = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#1c1c1c',
     },
     friendsList: {
         padding: 20,
-        backgroundColor: '#2c2c2c',
     },
     pageTitle: {
         fontSize: 20,
@@ -355,10 +401,20 @@ const styles = StyleSheet.create({
         marginBottom: 20,
         color: '#fff',
     },
-    friendItem: {
+    friendItemContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
         borderBottomWidth: 1,
         borderBottomColor: '#444',
-        paddingVertical: 10,
+        paddingVertical: 20,
+    },
+    friendProfilePicture: {
+        width: 40,
+        height: 40,
+        borderRadius: 50, // Circle avatar
+        marginRight: 10,
+    },
+    friendUsername: {
         fontSize: 18,
         color: '#fff',
     },
@@ -368,17 +424,56 @@ const styles = StyleSheet.create({
     },
     navbar: {
         backgroundColor: '#333',
-        paddingTop: 20,
+        paddingTop: 10,
         paddingBottom: 10,
-        paddingHorizontal: 20,
+        paddingHorizontal: 15,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
+        elevation: 5, // Add subtle shadow for elevation effect (on Android)
+        borderBottomWidth: 1,
+        borderBottomColor: '#444',
+        borderRadius: 10,  // Rounded corners for the navbar
     },
-    navbarTitle: {
-        color: '#fff',
+
+    friendInfoContainer: {
+        flexDirection: 'row',
+        alignItems: 'center', // Align items horizontally (profile picture and name)
+        flex: 1, // Allow it to take available space between left and right elements
+        justifyContent: 'center', // Center the content
+    },
+
+    profileAvatar: {
+        width: 35,
+        height: 35,
+        borderRadius: 50, // Circle avatar
+        borderWidth: 2,
+        borderColor: '#fff', // White border around avatar
+        marginRight: 10, // Space between avatar and username
+    },
+
+    friendUsername: {
         fontSize: 18,
+        color: '#fff',
         fontWeight: 'bold',
+        flexWrap: 'wrap', // Allow name to wrap if needed
+    },
+    sendButton: {
+        marginLeft: 10,
+        padding: 12,
+        borderRadius: 50,
+        backgroundColor: '#0078d4', // Blue background for send button
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+
+    // Apply flex wrap for group title
+    navbarGroupTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#fff',
+        flexWrap: 'wrap',
+        textAlign: 'center',
     },
     chatArea: {
         flex: 1,
