@@ -45,6 +45,7 @@ const Friends: React.FC = () => {
         { username: 'raller fake', userId: 'user_2oWWxEKyYTXW1HD21yPggkAlYjx' },
     ]);
     const [readMessages, setReadMessages] = useState<string[]>([]);
+    const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
 
     const { userId } = useAuth();
     const { user } = useUser();
@@ -141,32 +142,15 @@ const Friends: React.FC = () => {
         if (roomId && messages.length) saveMessages();
     }, [messages, roomId]);
 
-    useEffect(() => {
-        if (!userId || !roomId || ws.current) return;
+    const connectWebSocket = useCallback(() => {
+        if (!userId || !roomId || ws.current) return;  // Don't reinitialize WebSocket if already connected
+
+        // Create a new WebSocket connection
         ws.current = new WebSocket(`${SERVER_URL}:8080/chat`);
-        const socket = ws.current;
 
-        const reconnect = () => {
-            let attempt = 0;
-            const maxRetries = 5;
-            const retryInterval = 1000; // 1 second
-
-            const attemptReconnect = () => {
-                if (attempt < maxRetries) {
-                    attempt++;
-                    console.log(`Reconnecting WebSocket, attempt ${attempt}`);
-                    ws.current = new WebSocket(`${SERVER_URL}:8080/chat`);
-                } else {
-                    console.error('Max WebSocket reconnect attempts reached');
-                }
-            };
-
-            setTimeout(attemptReconnect, retryInterval * attempt); // Exponential backoff
-        };
-
-        socket.onopen = () => {
-            console.log('Connected');
-            socket.send(
+        ws.current.onopen = () => {
+            console.log('WebSocket connected');
+            ws.current?.send(
                 JSON.stringify({
                     type: 'join',
                     room: roomId,
@@ -176,7 +160,7 @@ const Friends: React.FC = () => {
             );
         };
 
-        socket.onmessage = (e) => {
+        ws.current.onmessage = (e) => {
             const data = JSON.parse(e.data);
             if (data.type === 'history') {
                 setMessages((prev) => (prev.length !== data.messages.length ? data.messages : prev));
@@ -200,18 +184,57 @@ const Friends: React.FC = () => {
             }
         };
 
-        socket.onerror = (error) => console.error('Error:', error);
-        socket.onclose = () => {
-            console.log('WebSocket closed. Reconnecting...');
-            reconnect();
+        ws.current.onerror = (error) => {
+            console.error('WebSocket Error:', error);
         };
 
-        return () => socket.close();
-    }, [userId, roomId, user]);
+        ws.current.onclose = () => {
+            console.log('WebSocket closed. Attempting reconnect...');
+            setIsReconnecting(true); // Mark reconnect attempt
+            reconnectWebSocket(); // Trigger reconnect
+        };
+    }, [roomId, userId, user]);
+
+    const reconnectWebSocket = useCallback(() => {
+        const maxRetries = 10;  // Max retries before giving up
+        let attempt = 0;
+        const retryInterval = 1000;  // Retry interval (in ms)
+
+        const attemptReconnect = () => {
+            if (ws.current && ws.current.readyState === WebSocket.CLOSED && attempt < maxRetries) {
+                attempt++;
+                console.log(`Reconnecting WebSocket, attempt ${attempt}`);
+                connectWebSocket(); // Attempt to reconnect
+
+                if (attempt >= maxRetries) {
+                    console.error('Max WebSocket reconnect attempts reached');
+                    setIsReconnecting(false); // Stop reconnect attempts after max retries
+                } else {
+                    setTimeout(attemptReconnect, retryInterval * attempt); // Exponential backoff
+                }
+            }
+        };
+
+        attemptReconnect(); // Start the reconnection attempts
+    }, [connectWebSocket]);
 
     useEffect(() => {
         if (scrollViewRef.current) scrollViewRef.current.scrollToEnd({ animated: false });
     }, [messages]);
+
+    useEffect(() => {
+        if (roomId) {
+            connectWebSocket(); // Connect/reconnect whenever the roomId changes (i.e., opening a new chat)
+        }
+
+        return () => {
+            if (ws.current) {
+                console.log("Cleaning up WebSocket connection...");
+                ws.current.close(); // Clean up WebSocket connection when leaving the room
+                ws.current = null; // Reset ws reference
+            }
+        };
+    }, [roomId, connectWebSocket]);
 
     const sendMessage = async (text: string, messageType: 'text' | 'gif') => {
         if (!text.trim()) return;
