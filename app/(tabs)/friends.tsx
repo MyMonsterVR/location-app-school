@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, {useEffect, useState, useRef, useCallback} from 'react';
 import { Image } from 'expo-image';
 import {ScrollView, Pressable, TextInput, StyleSheet, View, Modal, FlatList} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,6 +6,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { Text } from '~/components/ui/text';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import ProfilePicture from "@/components/ProfilePicture";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const SERVER_URL = `http://${process.env.EXPO_PUBLIC_SERVER_URL}`;
 
@@ -16,22 +17,26 @@ interface User {
 }
 
 interface Message {
+    _id: string;
     userId: string;
     text: string;
     messageType: 'text' | 'gif';
     username?: string;
+    readBy: string[];
     sentByClient?: boolean; // Flag to differentiate client messages
 }
 
 // Utility function to create a room ID dynamically
 const createRoomId = (userIds: string[]): string => {
-    const sortedUserIds = userIds.sort();
-    return `room-${sortedUserIds.join('-')}`;
+    const uniqueIds = Array.from(new Set(userIds));
+    return `room-${uniqueIds.sort().join('-')}`;
 };
 
 const Friends: React.FC = () => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [message, setMessage] = useState<string>(''); // message text state
+    const [readMessages, setReadMessages] = useState<string[]>([]);
+    const [unreadMessages, setUnreadMessages] = useState([]); // Track unread messages
     const [friends, setFriends] = useState<User[]>([
         { username: 'willer fake', userId: 'user_2oWHzUce33wlLHl4taHPaYpeIYn' },
         { username: 'raller fake', userId: 'user_2oWWxEKyYTXW1HD21yPggkAlYjx' },
@@ -42,9 +47,12 @@ const Friends: React.FC = () => {
     const [gifs, setGifs] = useState<any[]>([]);
     const [modalVisible, setModalVisible] = useState<boolean>(false);
     const [roomId, setRoomId] = useState<string>('');
+
     const { userId } = useAuth();
     const { user } = useUser();
 
+    const scrollViewRef = useRef<ScrollView | null>(null);
+    const flatListRef = useRef(null)
     let ws = useRef<WebSocket | null>(null);
 
     useEffect(() => {
@@ -56,6 +64,12 @@ const Friends: React.FC = () => {
 
         const socket = ws.current;
 
+        const reconnect = () => {
+            if (ws.current) {
+                ws.current = new WebSocket(`${SERVER_URL}:8080/chat`);
+            }
+        };
+
         socket.onopen = () => {
             console.log('Connected to WebSocket server');
             socket.send(JSON.stringify({ type: 'join', room: roomId, userId, displayName: user?.username }));
@@ -64,10 +78,43 @@ const Friends: React.FC = () => {
         socket.onmessage = (e) => {
             const data = JSON.parse(e.data);
             if (data.type === 'history') {
-                setMessages(data.messages);
-            } else if (data.type === 'message' && data.sentByClient !== true) {
-                setMessages((prevMessages) => [...prevMessages, data]);
+                setMessages((prevMessages) => {
+                    // Only update if the history is different from the previous state
+                    if (JSON.stringify(prevMessages) !== JSON.stringify(data.messages)) {
+                        return data.messages;
+                    }
+                    return prevMessages;
+                });
             }
+
+            if (data.type === 'message' && data.sentByClient !== true) {
+                setMessages((prevMessages) => {
+                    // Prevent adding duplicate messages
+                    if (!prevMessages.some(msg => msg._id === data._id)) {
+                        return [...prevMessages, data];
+                    }
+                    return prevMessages;
+                });
+            }
+
+            if (data.type === 'read') {
+                setMessages((prevMessages) =>
+                    prevMessages.map((msg) =>
+                        msg._id === data.messageId
+                            ? { ...msg, readBy: [...msg.readBy, data.userId] }
+                            : msg
+                    )
+                );
+            }
+        };
+
+        socket.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+
+        socket.onclose = () => {
+            console.log('WebSocket closed. Attempting to reconnect...');
+            reconnect();
         };
 
         return () => {
@@ -75,8 +122,6 @@ const Friends: React.FC = () => {
         };
     }, [userId, roomId, user]);
 
-
-    const scrollViewRef = useRef<ScrollView | null>(null);
 
     useEffect(() => {
         if (scrollViewRef.current) {
@@ -139,15 +184,27 @@ const Friends: React.FC = () => {
         })
             .then((response) => response.json())
             .then((data) => {
-                setMessages((prevMessages) => [
-                    ...prevMessages,
-                    { userId: userId ?? '', text, messageType, sentByClient: true },
-                ]);
+                if (data._id) {
+                    setMessages((prevMessages) => [
+                        ...prevMessages,
+                        {
+                            _id: data._id,
+                            userId: userId ?? '',
+                            username: user?.username,
+                            text,
+                            messageType,
+                            sentByClient: true
+                        },
+                    ]);
+                } else {
+                    console.error('Message ID not received from backend');
+                }
             })
             .catch((error) => {
                 console.error('Error sending message:', error);
             });
     };
+
 
     function debounce(func: Function, delay: number) {
         let timer: NodeJS.Timeout;
@@ -167,34 +224,46 @@ const Friends: React.FC = () => {
         debounce(async (searchTerm: string) => {
             if (!searchTerm.trim()) return;
 
-            const searchUrl = `https://tenor.googleapis.com/v2/search?q=${searchTerm}&key=${process.env.EXPO_PUBLIC_TENOR_KEY}&client_key=my_test_app&limit=10`;
-
             try {
-                const response = await fetch(searchUrl);
+                const response = await fetch(
+                    `https://tenor.googleapis.com/v2/search?q=${searchTerm}&key=${process.env.EXPO_PUBLIC_TENOR_KEY}&client_key=my_test_app&limit=10`
+                );
                 const data = await response.json();
-                setGifs(data.results); // Update the state with the GIF results
+                setGifs(data.results);
             } catch (error) {
                 console.error('Error fetching GIFs:', error);
             }
-        }, 500) // 500ms debounce
+        }, 500)
     ).current;
 
     useEffect(() => {
         debouncedSearchGifs(gifSearch);
     }, [gifSearch]);
 
-    const fetchGifsByCategory = (category: string) => {
-        const searchUrl = `https://tenor.googleapis.com/v2/search?q=${category}&key=${process.env.EXPO_PUBLIC_TENOR_KEY}&client_key=my_test_app&limit=10`;
+    useEffect(() => {
+        const saveMessages = async () => {
+            try {
+                await AsyncStorage.setItem(`messages-${roomId}`, JSON.stringify(messages));
+            } catch (error) {
+                console.error('Error caching messages:', error);
+            }
+        };
+        saveMessages();
+    }, [messages, roomId]);
 
-        fetch(searchUrl)
-            .then((response) => response.json())
-            .then((data) => {
-                setGifs(data.results); // Update the state with the GIF results
-            })
-            .catch((error) => {
-                console.error('Error fetching GIFs:', error);
-            });
-    };
+    useEffect(() => {
+        const loadMessages = async () => {
+            try {
+                const cachedMessages = await AsyncStorage.getItem(`messages-${roomId}`);
+                if (cachedMessages) {
+                    setMessages(JSON.parse(cachedMessages));
+                }
+            } catch (error) {
+                console.error('Error loading cached messages:', error);
+            }
+        };
+        loadMessages();
+    }, [roomId]);
 
     const closeGifModal = () => {
         setIsGifModalVisible(false);
@@ -239,6 +308,60 @@ const Friends: React.FC = () => {
         }
     };
 
+    const markAsRead = async (messageId) => {
+        try {
+            const response = await fetch(`${SERVER_URL}/read`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    messageId,
+                    userId, // Pass the current user's ID
+                    roomId, // Pass the current room ID
+                }),
+            });
+
+            const responseText = await response.text();
+            console.log('Response Text:', responseText);
+
+            if (response.ok) {
+                const responseData = JSON.parse(responseText);
+                console.log('Message marked as read:', responseData);
+            } else {
+                console.error('Failed to mark message as read:', responseText);
+            }
+        } catch (error) {
+            console.error('Error marking message as read:', error);
+        }
+    };
+
+    // Effect hook to mark messages as read when unreadMessages changes
+    const debouncedMarkAsRead = useCallback(
+        debounce((messageId) => {
+            markAsRead(messageId);
+        }, 1000), // Delay in ms
+        []
+    );
+
+    const onViewableItemsChanged = useRef(({ viewableItems, changed }) => {
+        const readMessagesInView = viewableItems.map(item => item.item._id);
+
+        // Send "read" requests for messages that are not marked as read
+        readMessagesInView.forEach((messageId: string) => {
+            if (!readMessages.includes(messageId)) {
+                // Mark this message as read
+                debouncedMarkAsRead(messageId); // Debounced to avoid multiple API calls
+                setReadMessages((prev) => [...prev, messageId]); // Add to readMessages state
+            }
+        });
+    });
+
+    // Configure FlatList's viewability options
+    const viewabilityConfig = {
+        waitForInteraction: true, // Wait until the user interacts
+        viewAreaCoveragePercentThreshold: 50, // 50% of the message needs to be visible
+    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -252,39 +375,46 @@ const Friends: React.FC = () => {
                 ))}
             </ScrollView>
 
-            {/* Modal with Navbar and Chat Area */}
             <Modal visible={modalVisible} animationType="slide">
                 <View style={styles.modalContainer}>
                     <View style={styles.navbar}>
-                        {/* Back Button */}
                         <Pressable onPress={() => setModalVisible(false)}>
                             <Icon name="arrow-back" size={24} color="#fff" />
                         </Pressable>
 
-                        {/* Profile Picture and Username */}
                         <View style={styles.friendInfoContainer}>
-                            {/* Profile Picture */}
                             <ProfilePicture userId={user?.userId ?? ''} style={styles.profileAvatar} />
-
-                            {/* Friend's Name */}
                             <Text style={styles.friendUsername}>{getChatTitle()}</Text>
                         </View>
 
-                        {/* Optional Settings Button */}
                         <Pressable onPress={() => console.log("Settings")}>
                             <Icon name="settings" size={24} color="#fff" />
                         </Pressable>
                     </View>
 
-                    {/* Chat Area */}
                     <View style={styles.chatArea}>
                         <FlatList
+                            ref={flatListRef}
                             data={messages}
                             keyExtractor={(item, index) => index.toString()}
                             renderItem={({ item, index }) => {
                                 const showUsername = index === 0 || messages[index - 1].userId !== item.userId;
+                                const isMessageRead = Array.isArray(item.readBy) && item.readBy.includes(userId);
+                                const isLastMessageInRow = index === messages.length - 1 || messages[index + 1].userId !== item.userId;
+
+                                // Only show "read by" status for your own messages
+                                const isOwnMessage = item.userId === userId;
+
+                                // Ensure readBy is an array before using slice, with a fallback to an empty array
+                                const readByUsers = Array.isArray(item.readBy) ? item.readBy.slice(0, 2) : [];
+
                                 return (
-                                    <View style={[styles.messageContainer, item.userId === userId ? styles.userMessage : styles.otherUserMessage]}>
+                                    <View
+                                        style={[
+                                            styles.messageContainer,
+                                            isOwnMessage ? styles.userMessage : styles.otherUserMessage,
+                                        ]}
+                                    >
                                         {item.userId !== userId && showUsername && (
                                             <View style={styles.messageHeader}>
                                                 <Text style={styles.username}>{item.username || 'Unknown'}</Text>
@@ -295,24 +425,42 @@ const Friends: React.FC = () => {
                                                 <Text style={styles.username}>{'Me'}</Text>
                                             </View>
                                         )}
+
                                         {item.messageType === 'text' ? (
                                             <Text style={styles.messageText}>{item.text}</Text>
                                         ) : (
-                                            <Image source={{ uri: item.text }} style={styles.gifMessage} />
+                                            <Image
+                                                source={{ uri: item.text }}
+                                                style={styles.gifMessage}
+                                                cachePolicy="memory-disk"
+                                            />
+                                        )}
+
+                                        {isOwnMessage && isLastMessageInRow && (
+                                            <View style={styles.readStatusContainer}>
+                                                {/* Display the first two users who have read the message */}
+                                                {readByUsers.map((userId, idx) => (
+                                                    <View
+                                                        key={userId}
+                                                        style={[
+                                                            styles.readStatusProfilePicture,
+                                                            { left: idx * 15 }, // Apply an offset to create the "peeking" effect
+                                                        ]}
+                                                    >
+                                                        <ProfilePicture userId={userId} styling={styles.readStatusProfilePicture} />
+                                                    </View>
+                                                ))}
+                                            </View>
                                         )}
                                     </View>
                                 );
                             }}
                             contentContainerStyle={styles.messagesContainer}
-                            onContentSizeChange={() => {
-                                if (scrollViewRef.current) {
-                                    scrollViewRef.current.scrollToEnd({ animated: true });
-                                }
-                            }}
+                            onViewableItemsChanged={onViewableItemsChanged.current}
+                            viewabilityConfig={viewabilityConfig}
                         />
                     </View>
 
-                    {/* Message Input */}
                     <View style={styles.inputContainer}>
                         <Pressable onPress={() => setIsGifModalVisible(true)} style={styles.gifButton}>
                             <Icon name="image" size={24} color="#fff" />
@@ -346,45 +494,33 @@ const Friends: React.FC = () => {
                         </Pressable>
                     </View>
 
-                    {/* Categories */}
-                    {!gifSearch && (
-                        <ScrollView horizontal style={styles.categoriesContainer}>
-                            {categories.map((category) => (
-                                <Pressable key={category.searchterm} onPress={() => fetchGifsByCategory(category.searchterm)}>
-                                    <Text style={styles.categoryText}>{category.name}</Text>
-                                </Pressable>
-                            ))}
-                        </ScrollView>
-                    )}
-
-                    {/* GIF Thumbnails */}
-                    <ScrollView contentContainerStyle={styles.gifsContainer}>
-                        {gifs.map((gif, index) => {
-                            const isTallGif = gif.media_formats.gif.width < gif.media_formats.gif.height;
+                    <FlatList
+                        data={gifs}
+                        keyExtractor={(item, index) => index.toString()}
+                        renderItem={({ item }) => {
+                            const gif = item.media_formats.gif;
+                            const isTallGif = gif.width < gif.height;
                             return (
                                 <Pressable
-                                    key={index}
-                                    onPress={() => insertGif(gif)}
-                                    style={[
-                                        styles.gifThumbnailContainer,
-                                        isTallGif && styles.tallGifThumbnail,
-                                    ]}
+                                    onPress={() => insertGif(item)}
+                                    style={[styles.gifThumbnailContainer, isTallGif && styles.tallGifThumbnail]}
                                 >
                                     <Image
-                                        source={{ uri: gif.media_formats.gif.url }}
-                                        style={[
-                                            styles.gifThumbnail,
-                                            isTallGif && styles.tallGifThumbnailImage,
-                                        ]}
+                                        source={{ uri: gif.url }}
+                                        style={[styles.gifThumbnail, isTallGif && styles.tallGifThumbnailImage]}
+                                        cachePolicy="memory-disk"
                                     />
                                 </Pressable>
                             );
-                        })}
-                    </ScrollView>
+                        }}
+                        numColumns={2}
+                        contentContainerStyle={styles.gifsContainer}
+                    />
                 </View>
             </Modal>
         </SafeAreaView>
     );
+
 };
 
 // Styles for the app
@@ -414,10 +550,6 @@ const styles = StyleSheet.create({
         borderRadius: 50, // Circle avatar
         marginRight: 10,
     },
-    friendUsername: {
-        fontSize: 18,
-        color: '#fff',
-    },
     modalContainer: {
         flex: 1,
         backgroundColor: '#222',
@@ -435,14 +567,12 @@ const styles = StyleSheet.create({
         borderBottomColor: '#444',
         borderRadius: 10,  // Rounded corners for the navbar
     },
-
     friendInfoContainer: {
         flexDirection: 'row',
         alignItems: 'center', // Align items horizontally (profile picture and name)
         flex: 1, // Allow it to take available space between left and right elements
         justifyContent: 'center', // Center the content
     },
-
     profileAvatar: {
         width: 35,
         height: 35,
@@ -451,23 +581,12 @@ const styles = StyleSheet.create({
         borderColor: '#fff', // White border around avatar
         marginRight: 10, // Space between avatar and username
     },
-
     friendUsername: {
         fontSize: 18,
         color: '#fff',
         fontWeight: 'bold',
         flexWrap: 'wrap', // Allow name to wrap if needed
     },
-    sendButton: {
-        marginLeft: 10,
-        padding: 12,
-        borderRadius: 50,
-        backgroundColor: '#0078d4', // Blue background for send button
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-
-    // Apply flex wrap for group title
     navbarGroupTitle: {
         fontSize: 16,
         fontWeight: 'bold',
@@ -600,6 +719,21 @@ const styles = StyleSheet.create({
         padding: 10,
         fontSize: 18,
     },
+    readStatusContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 5,
+    },
+    readStatusProfilePicture: {
+        width: 20,
+        height: 20,
+        borderRadius: 50, // Circle avatar
+        marginRight: 5,
+        borderWidth: 2,
+        borderColor: '#fff', // White border around avatar
+        position: 'relative', // Ensures stacking works
+    },
 });
+
 
 export default Friends;
