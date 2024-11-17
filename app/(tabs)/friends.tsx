@@ -34,72 +34,164 @@ const createRoomId = (userIds: string[]): string => {
 
 const Friends: React.FC = () => {
     const [messages, setMessages] = useState<Message[]>([]);
-    const [message, setMessage] = useState<string>(''); // message text state
-    const [readMessages, setReadMessages] = useState<string[]>([]);
-    const [unreadMessages, setUnreadMessages] = useState([]); // Track unread messages
+    const [message, setMessage] = useState<string>('');
+    const [gifSearch, setGifSearch] = useState<string>('');
+    const [gifs, setGifs] = useState<any[]>([]);
+    const [roomId, setRoomId] = useState<string>('');
+    const [modalVisible, setModalVisible] = useState<boolean>(false);
+    const [isGifModalVisible, setIsGifModalVisible] = useState<boolean>(false);
     const [friends, setFriends] = useState<User[]>([
         { username: 'willer fake', userId: 'user_2oWHzUce33wlLHl4taHPaYpeIYn' },
         { username: 'raller fake', userId: 'user_2oWWxEKyYTXW1HD21yPggkAlYjx' },
     ]);
-    const [gifSearch, setGifSearch] = useState<string>('');
-    const [categories, setCategories] = useState<any[]>([]);
-    const [isGifModalVisible, setIsGifModalVisible] = useState<boolean>(false);
-    const [gifs, setGifs] = useState<any[]>([]);
-    const [modalVisible, setModalVisible] = useState<boolean>(false);
-    const [roomId, setRoomId] = useState<string>('');
+    const [readMessages, setReadMessages] = useState<string[]>([]);
 
     const { userId } = useAuth();
     const { user } = useUser();
 
     const scrollViewRef = useRef<ScrollView | null>(null);
-    const flatListRef = useRef(null)
-    let ws = useRef<WebSocket | null>(null);
+    const flatListRef = useRef(null);
+    const ws = useRef<WebSocket | null>(null);
+
+    // region TODO: MOVE TO WHEN APP STARTS
+    const MAX_CACHE_SIZE = 100; // Maximum number of messages to cache
+    const CACHE_EXPIRATION_TIME = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+    const clearOldCache = async () => {
+        try {
+            // Get all the keys in AsyncStorage
+            const keys = await AsyncStorage.getAllKeys();
+
+            // Filter keys that are related to chat messages
+            const messageKeys = keys.filter(key => key.startsWith('messages-'));
+
+            // Define a threshold for cache expiration (e.g., 24 hours)
+            const cacheExpirationTime = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+            const currentTime = new Date().getTime();
+
+            // Iterate over each message cache key and check its timestamp
+            for (const key of messageKeys) {
+                const cachedData = await AsyncStorage.getItem(key);
+                const data = JSON.parse(cachedData);
+
+                if (data && data.timestamp) {
+                    const cacheAge = currentTime - new Date(data.timestamp).getTime();
+
+                    // If cache is older than the expiration time, clear it
+                    if (cacheAge > cacheExpirationTime) {
+                        console.log(`Cache for ${key} is older than 24 hours, clearing it.`);
+                        await AsyncStorage.removeItem(key);  // Clear the cache
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error clearing old cache:', error);
+        }
+    };
 
     useEffect(() => {
-        if (!userId || !roomId) return;
+        // Call the cache cleanup
+        clearOldCache();
+    }, []);
 
-        if (!ws.current) {
-            ws.current = new WebSocket(`${SERVER_URL}:8080/chat`);
+    // endregion
+
+    const saveMessages = async () => {
+        try {
+            // Keep only the most recent MAX_CACHE_SIZE messages
+            const messagesToCache = messages.slice(0, MAX_CACHE_SIZE);
+
+            // Save the messages and the timestamp
+            await AsyncStorage.setItem(`messages-${roomId}`, JSON.stringify({
+                messages: messagesToCache,
+                timestamp: Date.now(), // Save the current timestamp
+            }));
+        } catch (error) {
+            console.error('Error caching messages:', error);
         }
+    };
 
-        const socket = ws.current;
+    useEffect(() => {
+        if (!roomId) return;
 
-        const reconnect = () => {
-            if (ws.current) {
-                ws.current = new WebSocket(`${SERVER_URL}:8080/chat`);
+        const loadMessages = async () => {
+            try {
+                const cachedMessages = await AsyncStorage.getItem(`messages-${roomId}`);
+                if (cachedMessages) {
+                    setMessages(JSON.parse(cachedMessages));
+                } else {
+                    // If no cached messages exist, you can fetch them from the server
+                    // For example:
+                    const response = await fetch(`${SERVER_URL}/messages/${roomId}`);
+                    const data = await response.json();
+                    setMessages(data.messages);  // Assuming the response contains an array of messages
+
+                    // Optionally, you can cache these messages for future use
+                    await AsyncStorage.setItem(`messages-${roomId}`, JSON.stringify(data.messages));
+                }
+            } catch (error) {
+                console.error('Error loading cached messages:', error);
             }
         };
 
+        loadMessages();  // Call the function to load messages for the current roomId
+    }, [roomId]);  // Only trigger when roomId changes
+
+    useEffect(() => {
+        if (roomId && messages.length) saveMessages();
+    }, [messages, roomId]);
+
+    useEffect(() => {
+        if (!userId || !roomId || ws.current) return;
+        ws.current = new WebSocket(`${SERVER_URL}:8080/chat`);
+        const socket = ws.current;
+
+        const reconnect = () => {
+            let attempt = 0;
+            const maxRetries = 5;
+            const retryInterval = 1000; // 1 second
+
+            const attemptReconnect = () => {
+                if (attempt < maxRetries) {
+                    attempt++;
+                    console.log(`Reconnecting WebSocket, attempt ${attempt}`);
+                    ws.current = new WebSocket(`${SERVER_URL}:8080/chat`);
+                } else {
+                    console.error('Max WebSocket reconnect attempts reached');
+                }
+            };
+
+            setTimeout(attemptReconnect, retryInterval * attempt); // Exponential backoff
+        };
+
         socket.onopen = () => {
-            console.log('Connected to WebSocket server');
-            socket.send(JSON.stringify({ type: 'join', room: roomId, userId, displayName: user?.username }));
+            console.log('Connected');
+            socket.send(
+                JSON.stringify({
+                    type: 'join',
+                    room: roomId,
+                    userId,
+                    displayName: user?.username,
+                })
+            );
         };
 
         socket.onmessage = (e) => {
             const data = JSON.parse(e.data);
             if (data.type === 'history') {
-                setMessages((prevMessages) => {
-                    // Only update if the history is different from the previous state
-                    if (JSON.stringify(prevMessages) !== JSON.stringify(data.messages)) {
-                        return data.messages;
-                    }
-                    return prevMessages;
-                });
+                setMessages((prev) => (prev.length !== data.messages.length ? data.messages : prev));
             }
 
-            if (data.type === 'message' && data.sentByClient !== true) {
-                setMessages((prevMessages) => {
-                    // Prevent adding duplicate messages
-                    if (!prevMessages.some(msg => msg._id === data._id)) {
-                        return [...prevMessages, data];
-                    }
-                    return prevMessages;
+            if (data.type === 'message' && !data.sentByClient) {
+                setMessages((prev) => {
+                    if (prev.some((msg) => msg._id === data._id)) return prev;
+                    return [...prev, data];
                 });
             }
 
             if (data.type === 'read') {
-                setMessages((prevMessages) =>
-                    prevMessages.map((msg) =>
+                setMessages((prev) =>
+                    prev.map((msg) =>
                         msg._id === data.messageId
                             ? { ...msg, readBy: [...msg.readBy, data.userId] }
                             : msg
@@ -108,125 +200,64 @@ const Friends: React.FC = () => {
             }
         };
 
-        socket.onerror = (error) => {
-            console.error('WebSocket error:', error);
-        };
-
+        socket.onerror = (error) => console.error('Error:', error);
         socket.onclose = () => {
-            console.log('WebSocket closed. Attempting to reconnect...');
+            console.log('WebSocket closed. Reconnecting...');
             reconnect();
         };
 
-        return () => {
-            socket.close();
-        };
+        return () => socket.close();
     }, [userId, roomId, user]);
 
-
     useEffect(() => {
-        if (scrollViewRef.current) {
-            scrollViewRef.current.scrollToEnd({ animated: false });
-        }
-    }, [messages]); // This will scroll to the bottom whenever messages change
+        if (scrollViewRef.current) scrollViewRef.current.scrollToEnd({ animated: false });
+    }, [messages]);
 
-    useEffect(() => {
-        const fetchCategories = async () => {
-            try {
-                const response = await fetch(
-                    'https://tenor.googleapis.com/v2/categories?key=' +
-                    process.env.EXPO_PUBLIC_TENOR_KEY +
-                    '&client_key=my_test_app'
-                );
-                const data = await response.json();
-                setCategories(data.tags);
-            } catch (error) {
-                console.error('Error fetching categories:', error);
-            }
-        };
-
-        if (isGifModalVisible) {
-            fetchCategories();
-        }
-    }, [isGifModalVisible]);
-
-    // Handle the room selection (either one-on-one or group chat)
-    const onSelectChat = (selectedUsers: User[]) => {
-        const userIds = selectedUsers.map((user) => user.userId);
-        if (userId && !userIds.includes(userId)) {
-            userIds.push(userId); // Ensure the current user is included in the room
-        }
-
-        const newRoomId = createRoomId(userIds);
-        setRoomId(newRoomId);
-        setModalVisible(true);
-    };
-
-    // Send a message to the backend and update state
-    const sendMessage = (text: string, messageType: 'text' | 'gif') => {
+    const sendMessage = async (text: string, messageType: 'text' | 'gif') => {
         if (!text.trim()) return;
-
-        // Clear the input immediately
-        setMessage('');
-
-        // Send message via HTTP request
-        fetch(`${SERVER_URL}/send`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                room: roomId,
-                userId: userId ?? '', // Ensure userId is included
-                username: user?.username,
-                text,
-                messageType,
-            }),
-        })
-            .then((response) => response.json())
-            .then((data) => {
-                if (data._id) {
-                    setMessages((prevMessages) => [
-                        ...prevMessages,
-                        {
-                            _id: data._id,
-                            userId: userId ?? '',
-                            username: user?.username,
-                            text,
-                            messageType,
-                            sentByClient: true
-                        },
-                    ]);
-                } else {
-                    console.error('Message ID not received from backend');
-                }
-            })
-            .catch((error) => {
-                console.error('Error sending message:', error);
+        setMessage(''); // Clear the input immediately
+        try {
+            const response = await fetch(`${SERVER_URL}/send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    room: roomId,
+                    userId,
+                    username: user?.username,
+                    text,
+                    messageType,
+                }),
             });
+            const data = await response.json();
+            if (data._id) {
+                setMessages((prev) => [
+                    ...prev,
+                    { _id: data._id, userId, username: user?.username, text, messageType, sentByClient: true },
+                ]);
+            } else {
+                console.error('Message ID not received from backend');
+            }
+        } catch (error) {
+            console.error('Error sending message:', error);
+        }
     };
 
-
-    function debounce(func: Function, delay: number) {
+    const debounce = (func: Function, delay: number) => {
         let timer: NodeJS.Timeout;
-
         return (...args: any[]) => {
-            if (timer) {
-                clearTimeout(timer); // Cancel the previous timer if the user keeps typing
-            }
-
-            timer = setTimeout(() => {
-                func(...args); // Call the function after the delay
-            }, delay);
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => func(...args), delay);
         };
-    }
+    };
 
     const debouncedSearchGifs = useRef(
         debounce(async (searchTerm: string) => {
             if (!searchTerm.trim()) return;
+            if (searchTerm === gifSearch) return;
 
             try {
                 const response = await fetch(
-                    `https://tenor.googleapis.com/v2/search?q=${searchTerm}&key=${process.env.EXPO_PUBLIC_TENOR_KEY}&client_key=my_test_app&limit=10`
+                    `https://tenor.googleapis.com/v2/search?q=${searchTerm}&key=${process.env.EXPO_PUBLIC_TENOR_KEY}&limit=10`
                 );
                 const data = await response.json();
                 setGifs(data.results);
@@ -240,31 +271,6 @@ const Friends: React.FC = () => {
         debouncedSearchGifs(gifSearch);
     }, [gifSearch]);
 
-    useEffect(() => {
-        const saveMessages = async () => {
-            try {
-                await AsyncStorage.setItem(`messages-${roomId}`, JSON.stringify(messages));
-            } catch (error) {
-                console.error('Error caching messages:', error);
-            }
-        };
-        saveMessages();
-    }, [messages, roomId]);
-
-    useEffect(() => {
-        const loadMessages = async () => {
-            try {
-                const cachedMessages = await AsyncStorage.getItem(`messages-${roomId}`);
-                if (cachedMessages) {
-                    setMessages(JSON.parse(cachedMessages));
-                }
-            } catch (error) {
-                console.error('Error loading cached messages:', error);
-            }
-        };
-        loadMessages();
-    }, [roomId]);
-
     const closeGifModal = () => {
         setIsGifModalVisible(false);
         setGifs([]);
@@ -272,96 +278,70 @@ const Friends: React.FC = () => {
     };
 
     const insertGif = (gif: any) => {
-        const gifUrl = gif.media_formats.gif.url;
-
-        // Immediately send the GIF URL to the server, without modifying the message state
-        sendMessage(gifUrl, 'gif');
-        closeGifModal()
+        sendMessage(gif.media_formats.gif.url, 'gif');
+        closeGifModal();
     };
 
-    // Helper function to get the chat title (friend's name or group name)
     const getChatTitle = () => {
-        // Split the room ID into its user IDs
-        const participantUserIds = roomId.split('-').slice(1);  // Exclude the first 'room' part
-
-        // Check if it's a one-on-one or group chat
+        const participantUserIds = roomId.split('-').slice(1); // Exclude the first 'room' part
         if (participantUserIds.length === 1) {
-            // One-on-one chat: Find the friend's username (exclude user's own ID)
-            const friend = friends.find(friend => friend.userId === participantUserIds[0]);
+            const friend = friends.find((friend) => friend.userId === participantUserIds[0]);
             return friend ? friend.username : 'Unknown Friend';
         } else {
-            // Group chat: Exclude the user's own ID and show the other participants' names
-            const otherParticipants = friends.filter(friend =>
-                participantUserIds.includes(friend.userId) && friend.userId !== userId
+            const otherParticipants = friends.filter(
+                (friend) => participantUserIds.includes(friend.userId) && friend.userId !== userId
             );
-
-            // If there are other participants, show their names (e.g., "Alice, Bob, and 3 others")
-            const participantNames = otherParticipants.map(friend => friend.username);
-
-            if (participantNames.length === 1) {
-                return participantNames[0]; // Only one other participant
-            } else if (participantNames.length > 1) {
-                return `${participantNames.slice(0, 2).join(', ')} and ${participantNames.length - 2} others`; // Show the first two names and the count of others
-            } else {
-                return 'Group Chat'; // Default if no participants found
-            }
+            const participantNames = otherParticipants.map((friend) => friend.username);
+            if (participantNames.length === 1) return participantNames[0];
+            return `${participantNames.slice(0, 2).join(', ')} and ${participantNames.length - 2} others`;
         }
     };
 
-    const markAsRead = async (messageId) => {
+    const markAsRead = async (messageId: string) => {
         try {
             const response = await fetch(`${SERVER_URL}/read`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     messageId,
-                    userId, // Pass the current user's ID
-                    roomId, // Pass the current room ID
+                    userId,
+                    roomId,
                 }),
             });
-
             const responseText = await response.text();
-            console.log('Response Text:', responseText);
-
-            if (response.ok) {
-                const responseData = JSON.parse(responseText);
-                console.log('Message marked as read:', responseData);
-            } else {
-                console.error('Failed to mark message as read:', responseText);
-            }
+            if (!response.ok) console.error('Failed to mark message as read:', responseText);
         } catch (error) {
             console.error('Error marking message as read:', error);
         }
     };
 
-    // Effect hook to mark messages as read when unreadMessages changes
-    const debouncedMarkAsRead = useCallback(
-        debounce((messageId) => {
-            markAsRead(messageId);
-        }, 1000), // Delay in ms
-        []
-    );
-
-    const onViewableItemsChanged = useRef(({ viewableItems, changed }) => {
-        const readMessagesInView = viewableItems.map(item => item.item._id);
-
-        // Send "read" requests for messages that are not marked as read
-        readMessagesInView.forEach((messageId: string) => {
+    const debouncedMarkAsRead = useCallback(debounce(markAsRead, 1000), []);
+    const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: any[] }) => {
+        const readMessagesInView = viewableItems.map((item) => item.item._id);
+        readMessagesInView.forEach((messageId) => {
             if (!readMessages.includes(messageId)) {
-                // Mark this message as read
-                debouncedMarkAsRead(messageId); // Debounced to avoid multiple API calls
-                setReadMessages((prev) => [...prev, messageId]); // Add to readMessages state
+                debouncedMarkAsRead(messageId);
+                setReadMessages((prev) => [...prev, messageId]);
             }
         });
     });
 
-    // Configure FlatList's viewability options
     const viewabilityConfig = {
-        waitForInteraction: true, // Wait until the user interacts
-        viewAreaCoveragePercentThreshold: 50, // 50% of the message needs to be visible
+        waitForInteraction: true,
+        viewAreaCoveragePercentThreshold: 50,
     };
+
+    const onSelectChat = (selectedUsers: User[]) => {
+        const userIds = selectedUsers.map((user) => user.userId);
+        if (userId && !userIds.includes(userId)) {
+            userIds.push(userId); // Make sure the current user is included
+        }
+
+        const newRoomId = createRoomId(userIds); // Create a unique room ID
+        setRoomId(newRoomId); // Set the room ID to join the chat
+        setModalVisible(true); // You can control showing modals or other UI elements here
+    };
+
 
     return (
         <SafeAreaView style={styles.container}>
@@ -404,8 +384,6 @@ const Friends: React.FC = () => {
 
                                 // Only show "read by" status for your own messages
                                 const isOwnMessage = item.userId === userId;
-
-                                // Ensure readBy is an array before using slice, with a fallback to an empty array
                                 const readByUsers = Array.isArray(item.readBy) ? item.readBy.slice(0, 2) : [];
 
                                 return (
