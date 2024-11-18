@@ -1,6 +1,6 @@
 import React, {useEffect, useState, useRef, useCallback} from 'react';
 import { Image } from 'expo-image';
-import {ScrollView, Pressable, TextInput, StyleSheet, View, Modal, FlatList} from 'react-native';
+import {ScrollView, Pressable, TextInput, StyleSheet, View, Modal, FlatList, Dimensions} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Text } from '~/components/ui/text';
@@ -215,6 +215,9 @@ const Friends: React.FC = () => {
                 } else {
                     setTimeout(attemptReconnect, retryInterval * attempt); // Exponential backoff
                 }
+            } else if (!ws.current) {
+                console.log('WebSocket was closed or not initialized, attempting to reconnect...');
+                connectWebSocket(); // Make sure to re-initialize the connection if it's completely closed
             }
         };
 
@@ -285,6 +288,7 @@ const Friends: React.FC = () => {
                 const response = await fetch(
                     `https://tenor.googleapis.com/v2/search?q=${searchTerm}&key=${process.env.EXPO_PUBLIC_TENOR_KEY}&limit=20&pos=${pos}`
                 );
+
                 const data = await response.json();
 
                 if (pos === '') {
@@ -438,7 +442,13 @@ const Friends: React.FC = () => {
                                     <View
                                         style={[
                                             styles.messageContainer,
-                                            isOwnMessage ? styles.userMessage : styles.otherUserMessage,
+                                            isOwnMessage ?
+                                                item.messageType === 'text'
+                                                    ? styles.userMessage
+                                                    : styles.userGifMessage
+                                                : item.messageType === 'text'
+                                                    ? styles.otherUserMessage
+                                                    : styles.otherUserGifMessage,
                                         ]}
                                     >
                                         {item.userId !== userId && showUsername && (
@@ -524,7 +534,7 @@ const Friends: React.FC = () => {
                         data={gifs}
                         keyExtractor={(item, index) => index.toString()}
                         renderItem={({ item }) => {
-                            const gif = item.media_formats.gif;
+                            const gif = item.media_formats.tinygif;
                             const isTallGif = gif.width < gif.height;
                             return (
                                 <Pressable
@@ -539,7 +549,7 @@ const Friends: React.FC = () => {
                                 </Pressable>
                             );
                         }}
-                        numColumns={2}
+                        numColumns="2"
                         contentContainerStyle={styles.gifsContainer}
                         onEndReached={loadMoreGifs}  // Trigger loading more GIFs when reaching the bottom
                         onEndReachedThreshold={0.5}  // Start loading more when 50% of the list is visible
@@ -644,8 +654,16 @@ const styles = StyleSheet.create({
         backgroundColor: '#0078d4',
         alignSelf: 'flex-end',
     },
+    userGifMessage: {
+        padding: 0,
+        alignSelf: 'flex-end',
+    },
     otherUserMessage: {
         backgroundColor: '#333',
+        alignSelf: 'flex-start',
+    },
+    otherUserGifMessage: {
+        padding: 0,
         alignSelf: 'flex-start',
     },
     messageHeader: {
@@ -718,8 +736,7 @@ const styles = StyleSheet.create({
         borderRadius: 10,
     },
     gifsContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
+        flexDirection: 'column',
         padding: 10,
     },
     gifThumbnailContainer: {
@@ -728,7 +745,7 @@ const styles = StyleSheet.create({
     },
     gifThumbnail: {
         width: '100%',
-        height: 150,
+        height: Dimensions.get('window').height / 4, // Adjust the height based on your needs
         borderRadius: 10,
         contentFit: 'cover',
     },
