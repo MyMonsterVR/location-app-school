@@ -46,6 +46,9 @@ const Friends: React.FC = () => {
     ]);
     const [readMessages, setReadMessages] = useState<string[]>([]);
     const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
+    const [pos, setPos] = useState<string>('');  // Position for pagination (Tenor's `pos` parameter)
+    const [hasMore, setHasMore] = useState<boolean>(true);
+    const [loading, setLoading] = useState<boolean>(false);
 
     const { userId } = useAuth();
     const { user } = useUser();
@@ -274,25 +277,47 @@ const Friends: React.FC = () => {
     };
 
     const debouncedSearchGifs = useRef(
-        debounce(async (searchTerm: string) => {
+        debounce(async (searchTerm: string, pos: string) => {
             if (!searchTerm.trim()) return;
-            if (searchTerm === gifSearch) return;
+            setLoading(true);
 
             try {
                 const response = await fetch(
-                    `https://tenor.googleapis.com/v2/search?q=${searchTerm}&key=${process.env.EXPO_PUBLIC_TENOR_KEY}&limit=10`
+                    `https://tenor.googleapis.com/v2/search?q=${searchTerm}&key=${process.env.EXPO_PUBLIC_TENOR_KEY}&limit=20&pos=${pos}`
                 );
                 const data = await response.json();
-                setGifs(data.results);
+
+                if (pos === '') {
+                    // Reset GIFs on new search
+                    setGifs(data.results);
+                } else {
+                    // Append GIFs if not on the first search
+                    setGifs((prevGifs) => [...prevGifs, ...data.results]);
+                }
+
+                // Determine if there are more GIFs to load
+                setHasMore(data.results.length === 20);  // If we received 20 GIFs, there's more to load
+                setPos(data.next || '');  // Set the new `pos` value for the next request
             } catch (error) {
                 console.error('Error fetching GIFs:', error);
+            } finally {
+                setLoading(false);
             }
         }, 500)
     ).current;
 
     useEffect(() => {
-        debouncedSearchGifs(gifSearch);
+        if (gifSearch) {
+            setPos('');  // Reset `pos` for the new search
+            setHasMore(true);  // Ensure more GIFs can be loaded again
+            debouncedSearchGifs(gifSearch, '');  // Start a fresh search
+        }
     }, [gifSearch]);
+
+    const loadMoreGifs = () => {
+        if (loading || !hasMore || !pos) return;  // Avoid loading more if already fetching or no more results
+        debouncedSearchGifs(gifSearch, pos);  // Use the `pos` to load the next set of GIFs
+    };
 
     const closeGifModal = () => {
         setIsGifModalVisible(false);
@@ -516,6 +541,9 @@ const Friends: React.FC = () => {
                         }}
                         numColumns={2}
                         contentContainerStyle={styles.gifsContainer}
+                        onEndReached={loadMoreGifs}  // Trigger loading more GIFs when reaching the bottom
+                        onEndReachedThreshold={0.5}  // Start loading more when 50% of the list is visible
+                        ListFooterComponent={loading ? <Text>Loading more...</Text> : null}  // Footer to show loading status
                     />
                 </View>
             </Modal>
@@ -702,7 +730,7 @@ const styles = StyleSheet.create({
         width: '100%',
         height: 150,
         borderRadius: 10,
-        resizeMode: 'cover',
+        contentFit: 'cover',
     },
     tallGifThumbnail: {
         width: '100%',
@@ -710,7 +738,7 @@ const styles = StyleSheet.create({
     },
     tallGifThumbnailImage: {
         height: '100%',
-        resizeMode: 'cover',
+        contentFit: 'cover',
     },
     categoriesContainer: {
         padding: 10,
