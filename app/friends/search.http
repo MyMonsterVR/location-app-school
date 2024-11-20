@@ -1,0 +1,6 @@
+POST http://localhost/search
+Content-Type: application/json
+
+{
+    "username": "willer"
+}
