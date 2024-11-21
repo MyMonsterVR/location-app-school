@@ -18,13 +18,21 @@ interface User {
 }
 
 interface Message {
+    __v: number;
     _id: string;
-    userId: string;
-    text: string;
-    messageType: 'text' | 'gif';
-    username?: string;
-    readBy: string[];
-    sentByClient?: boolean;
+    createdAt: string;
+    updatedAt: string;
+    message: {
+        text: string;
+        messageType: 'text' | 'gif';
+    };
+    room: {
+        roomId: string;
+    };
+    user: {
+        userId: string;
+        username: string;
+    }[];
 }
 
 const Chat: React.FC = () => {
@@ -95,6 +103,7 @@ const Chat: React.FC = () => {
 
         ws.current.onopen = () => {
             console.log('WebSocket connected');
+            setMessages([]);  // Clear messages when connecting to a new room
             ws.current?.send(
                 JSON.stringify({
                     type: 'join',
@@ -113,10 +122,27 @@ const Chat: React.FC = () => {
             }
 
             if (data.type === 'message' && !data.sentByClient) {
+                console.log('Received message:', data);
+
                 setMessages((prev) => {
                     if (prev.some((msg) => msg._id === data._id)) return prev;
-                    return [...prev, data];
+
+                    // Flatten the message data for rendering consistency
+                    return [...prev, {
+                        ...data,
+                        message: {
+                            text: data.text,  // Assuming you want a message object with a 'text' key
+                            messageType: data.messageType,
+                            readBy: data.readBy || [],
+                        },
+                        user: {
+                            userId: data.userId,
+                            username: data.username,
+                        },
+                    }];
                 });
+
+                console.log('messages:', messages);
             }
 
             if (data.type === 'read') {
@@ -176,6 +202,21 @@ const Chat: React.FC = () => {
         if (!text.trim()) return;
         setMessage('');  // Clear the input
 
+        // Add the message immediately to the chat (for instant UI update)
+        const sentMessage = {
+            message: {
+                text: text,  // Assuming you want a message object with a 'text' key
+                messageType: messageType,
+                readBy: [],
+            },
+            user: {
+                userId: userId,
+                username: user.username,
+            },
+        };
+
+        setMessages((prev) => [...prev, sentMessage]);
+
         try {
             const response = await fetch(`http://${SERVER_URL}/send`, {
                 method: 'POST',
@@ -193,15 +234,19 @@ const Chat: React.FC = () => {
                     participants,
                 }),
             });
+
             const data = await response.json();
+            console.log('Message sent:', data);
 
-            console.log(data)
-
+            // Once the message is confirmed by the backend, update it with the real ID
             if (data._id) {
-                setMessages((prev) => [
-                    ...prev,
-                    { _id: data._id, userId, username: user?.username, text, messageType, sentByClient: true },
-                ]);
+                setMessages((prev) =>
+                    prev.map((msg) =>
+                        msg._id === sentMessage._id
+                            ? { ...msg, _id: data._id, sentByClient: false }  // Update temp ID to real ID
+                            : msg
+                    )
+                );
             } else {
                 console.error('Message ID not received from backend');
             }
@@ -247,7 +292,6 @@ const Chat: React.FC = () => {
         }
     }, [roomId]);
 
-    // TODO: Fix chat title
     // TODO: Change room db to to not be an array
     // TODO: Fix message loading
     useEffect(() => {
@@ -260,8 +304,6 @@ const Chat: React.FC = () => {
                 const otherParticipant = Object.values(participants).find(
                     (participant) => participant.userId !== userId
                 );
-
-                console.log('Other participant:', otherParticipant);  // Log other participant
 
                 if(otherParticipant) {
                     return otherParticipant.username || 'Unknown Participant';
@@ -279,8 +321,6 @@ const Chat: React.FC = () => {
                 const participantNames = otherParticipants.map(
                     (participant) => participant.username
                 );
-
-                console.log('Participant names:', participantNames);  // Log filtered names
 
                 // Return participant names or fallback to "others"
                 if (participantNames.length === 1) {
@@ -309,61 +349,71 @@ const Chat: React.FC = () => {
                     <Icon name="settings" size={24} color="#fff" />
                 </Pressable>
             </View>
+
             <View style={styles.chatArea}>
                 <FlatList
                     ref={flatListRef}
                     data={messages}
                     keyExtractor={(item, index) => index.toString()}
                     renderItem={({ item, index }) => {
-                        const showUsername = index === 0 || messages[index - 1].userId !== item.userId;
+                        const user = item.user; // Directly access the 'user' object
+                        if (!user) return null; // If 'user' is undefined, don't render the message
+
+                        const showUsername = index === 0 || (messages[index - 1]?.user?.userId !== user.userId);
                         const isMessageRead = Array.isArray(item.readBy) && item.readBy.includes(userId);
-                        const isLastMessageInRow = index === messages.length - 1 || messages[index + 1].userId !== item.userId;
-                        const isOwnMessage = item.userId === userId;
+                        const isLastMessageInRow = index === messages.length - 1 || messages[index + 1]?.user?.userId !== user.userId;
+                        const isOwnMessage = user.userId === userId;
                         const readByUsers = Array.isArray(item.readBy) ? item.readBy.slice(0, 2) : [];
 
                         return (
                             <View
                                 style={[
                                     styles.messageContainer,
-                                    isOwnMessage ?
-                                        item.messageType === 'text'
+                                    isOwnMessage
+                                        ? item.message.messageType === 'text'
                                             ? styles.userMessage
                                             : styles.userGifMessage
-                                        : item.messageType === 'text'
+                                        : item.message.messageType === 'text'
                                             ? styles.otherUserMessage
                                             : styles.otherUserGifMessage,
                                 ]}
                             >
-                                {item.userId !== userId && showUsername && (
+                                {/* Display Username */}
+                                {user.userId !== userId && showUsername && (
                                     <View style={styles.messageHeader}>
-                                        <Text style={styles.username}>{item.username || 'Unknown'}</Text>
+                                        <Text style={styles.username}>{user.username || 'Unknown'}</Text>
                                     </View>
                                 )}
-                                {item.userId === userId && showUsername && (
+
+                                {user.userId === userId && showUsername && (
                                     <View style={styles.messageHeaderRight}>
                                         <Text style={styles.username}>{'Me'}</Text>
                                     </View>
                                 )}
-                                {item.messageType === 'text' ? (
-                                    <Text style={styles.messageText}>{item.text}</Text>
+
+                                {/* Message Type: Text or GIF */}
+                                {item.message.messageType === 'text' ? (
+                                    <Text style={styles.messageText}>{item.message.text}</Text>
                                 ) : (
                                     <Image
-                                        source={{ uri: item.text }}
+                                        source={{ uri: item.message.text }}
                                         style={styles.gifMessage}
                                         cachePolicy="memory-disk"
                                     />
                                 )}
+
+                                {/* Read Status */}
                                 {isOwnMessage && isLastMessageInRow && (
                                     <View style={styles.readStatusContainer}>
-                                        {readByUsers.map((userId, idx) => (
+                                        {readByUsers.map((readUserId, idx) => (
                                             <View
-                                                key={userId}
+                                                key={readUserId}
                                                 style={[
                                                     styles.readStatusProfilePicture,
                                                     { left: idx * 15 },
                                                 ]}
                                             >
-                                                <ProfilePicture userId={userId} styling={styles.readStatusProfilePicture} />
+                                                <ProfilePicture userId={readUserId} styling={styles.readStatusProfilePicture} />
                                             </View>
                                         ))}
                                     </View>
@@ -374,6 +424,8 @@ const Chat: React.FC = () => {
                     contentContainerStyle={styles.messagesContainer}
                 />
             </View>
+
+            {/* Message Input Area */}
             <View style={styles.inputContainer}>
                 <Pressable onPress={() => setIsGifModalVisible(true)} style={styles.gifButton}>
                     <Icon name="image" size={24} color="#fff" />
@@ -389,6 +441,8 @@ const Chat: React.FC = () => {
                     <Icon name="send" size={24} color="#0078d4" />
                 </Pressable>
             </View>
+
+            {/* GIF Modal */}
             <GifModal isVisible={isGifModalVisible} onClose={() => setIsGifModalVisible(false)} onSelectGif={sendMessage} />
         </SafeAreaView>
     );
