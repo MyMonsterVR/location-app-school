@@ -18,13 +18,13 @@ interface User {
 }
 
 interface Message {
-    __v: number;
     _id: string;
     createdAt: string;
     updatedAt: string;
     message: {
         text: string;
         messageType: 'text' | 'gif';
+        readby: string[];
     };
     room: {
         roomId: string;
@@ -122,8 +122,6 @@ const Chat: React.FC = () => {
             }
 
             if (data.type === 'message' && !data.sentByClient) {
-                console.log('Received message:', data);
-
                 setMessages((prev) => {
                     if (prev.some((msg) => msg._id === data._id)) return prev;
 
@@ -141,8 +139,6 @@ const Chat: React.FC = () => {
                         },
                     }];
                 });
-
-                console.log('messages:', messages);
             }
 
             if (data.type === 'read') {
@@ -236,7 +232,6 @@ const Chat: React.FC = () => {
             });
 
             const data = await response.json();
-            console.log('Message sent:', data);
 
             // Once the message is confirmed by the backend, update it with the real ID
             if (data._id) {
