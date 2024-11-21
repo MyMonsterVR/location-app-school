@@ -330,6 +330,11 @@ const Chat: React.FC = () => {
         setChatTitle(getChatTitle())
     }, [local.roomId, participants]);
 
+    // Scroll to the bottom of the chat when new messages are added
+    useEffect(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+    }, [messages]);
+
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.navbar}>
