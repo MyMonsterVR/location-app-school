@@ -210,7 +210,6 @@ const Chat: React.FC = () => {
         }
     };
 
-
     useEffect(() => {
         if (roomId) {
             connectWebSocket();  // Connect to WebSocket with the current room ID
@@ -237,7 +236,7 @@ const Chat: React.FC = () => {
 
         const data = await response.json();
         if (data) {
-            setParticipants(data);  // Update participants list
+            setParticipants(data.users);  // Update participants list
         }
     };
 
@@ -253,30 +252,28 @@ const Chat: React.FC = () => {
     // TODO: Fix message loading
     useEffect(() => {
         const getChatTitle = () => {
-            const participantUserIds = roomId.split('-').slice(1);  // Exclude the 'room-' part
-            console.log('participantUserIds:', participantUserIds);  // Log participant IDs from roomId
+            const participantUserIds = participants
 
             // Case 1: When there are exactly two participants in the chat (one current user and one other user)
-            if (participantUserIds.length === 2) {
-                // Find the other participant from the participants object
-                const participant = Object.values(participants).find(
-                    (p) => participantUserIds.includes(p.id) && p.id !== userId  // Ensure the participant is not the current user
+            if (participantUserIds.length === 2)
+            {
+                const otherParticipant = Object.values(participants).find(
+                    (participant) => participant.userId !== userId
                 );
 
-                if (participant) {
-                    // Return the participant's username
-                    console.log('Found participant:', participant.username);
-                    return participant.username || 'Unknown Participant';
-                } else {
-                    console.log('No participant found for roomId:', roomId);
+                console.log('Other participant:', otherParticipant);  // Log other participant
+
+                if(otherParticipant) {
+                    return otherParticipant.username || 'Unknown Participant';
                 }
             }
             // Case 2: When there are more than two participants in the chat
-            else if (participantUserIds.length > 2) {
+            else if (participantUserIds.length > 2)
+            {
                 // Filter participants who are in the current room and not the current user
                 const otherParticipants = Object.values(participants).filter(
                     (participant) =>
-                        participantUserIds.includes(participant.id) && participant.id !== userId
+                        participantUserIds.includes(participant.userId) && participant.userId !== userId
                 );
 
                 const participantNames = otherParticipants.map(
@@ -296,7 +293,7 @@ const Chat: React.FC = () => {
         };
 
         setChatTitle(getChatTitle())
-    }, [local.roomId]);
+    }, [local.roomId, participants]);
 
     return (
         <SafeAreaView style={styles.container}>
