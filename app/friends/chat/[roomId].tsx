@@ -37,7 +37,7 @@ const Chat: React.FC = () => {
     const [chatTitle, setChatTitle] = useState<string[]>([]);
     const [roomType, setRoomType] = useState<string>('single');
     const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
-    const { userId } = useAuth();
+    const { userId, getToken } = useAuth();
     const { user } = useUser();
     const flatListRef = useRef(null);
     const ws = useRef<WebSocket | null>(null);
@@ -179,17 +179,24 @@ const Chat: React.FC = () => {
         try {
             const response = await fetch(`http://${SERVER_URL}/send`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${await getToken()}`,
+                },
                 body: JSON.stringify({
                     room: roomId,
                     userId,
                     username: user?.username,
                     text,
                     messageType,
-
+                    roomType,
+                    participants,
                 }),
             });
             const data = await response.json();
+
+            console.log(data)
+
             if (data._id) {
                 setMessages((prev) => [
                     ...prev,
@@ -219,12 +226,13 @@ const Chat: React.FC = () => {
 
     // fetch participants username, ids and avatars
     const fetchParticipants = async () => {
-        const participantUserIds = roomId.split('-').slice(1);
-
         const response = await fetch(`http://${SERVER_URL}/participants`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ room: roomId, participantUserIds }),
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${await getToken()}`,
+            },
+            body: JSON.stringify({ room: roomId }),
         });
 
         const data = await response.json();
@@ -240,6 +248,9 @@ const Chat: React.FC = () => {
         }
     }, [roomId]);
 
+    // TODO: Fix chat title
+    // TODO: Change room db to to not be an array
+    // TODO: Fix message loading
     useEffect(() => {
         const getChatTitle = () => {
             const participantUserIds = roomId.split('-').slice(1);  // Exclude the 'room-' part

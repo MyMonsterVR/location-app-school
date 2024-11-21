@@ -13,7 +13,7 @@ interface User {
 
 const Friends: React.FC = () => {
     const [friends, setFriends] = useState<User[]>([]);
-    const { userId } = useAuth();  // User ID from Clerk Auth
+    const { userId, getToken  } = useAuth();  // User ID from Clerk Auth
     const [friendUsername, setFriendUsername] = useState(''); // Username for searching friends
     const [isModalVisible, setModalVisible] = useState(false); // Modal visibility state
 
@@ -24,10 +24,12 @@ const Friends: React.FC = () => {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${await getToken()}`,
                 },
             });
             if (response.ok) {
                 const data = await response.json();
+                console.log(data)
                 setFriends(data.friends || []);
             } else {
                 console.error('Failed to fetch friends:', response.statusText);
@@ -46,7 +48,6 @@ const Friends: React.FC = () => {
 
     // Function to add a friend by their userId using fetch()
     const addFriend = async (friendUserId: string) => {
-
         try {
             const response = await fetch(
                 `http://${process.env.EXPO_PUBLIC_SERVER_URL}/friends/add`,
@@ -54,6 +55,7 @@ const Friends: React.FC = () => {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${await getToken()}`,
                     },
                     body: JSON.stringify({ userId, friendUserId }),
                 }
@@ -87,6 +89,7 @@ const Friends: React.FC = () => {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${await getToken()}`,
                     },
                     body: JSON.stringify({ username: friendUsername })
                 },
@@ -121,7 +124,7 @@ const Friends: React.FC = () => {
                 <Text style={styles.pageTitle}>Friends</Text>
 
                 {friends.map((friend, index) => (
-                    <Pressable key={index} onPress={() => onSelectChat(friend.userId)} style={styles.friendItemContainer}>
+                    <Pressable key={index} onPress={() => onSelectChat(friend.roomId)} style={styles.friendItemContainer}>
                         <ProfilePicture userId={friend.userId} styling={styles.friendProfilePicture} />
                         <Text style={styles.friendUsername}>{friend.username}</Text>
                     </Pressable>
