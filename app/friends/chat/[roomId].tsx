@@ -10,7 +10,7 @@ import GifModal from '@/components/GifModal';
 import {useAuth, useUser} from '@clerk/clerk-expo';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {router, useLocalSearchParams} from "expo-router";
-import {debounce} from "@/app/utils/utils";
+import {debounce} from "@/utils/utils";
 
 const SERVER_URL = `${process.env.EXPO_PUBLIC_SERVER_URL}`;
 

@@ -3,7 +3,7 @@ import { View, TextInput, FlatList, Pressable, StyleSheet, Dimensions, Modal } f
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Text } from '~/components/ui/text';
-import {debounce} from "@/app/utils/utils";
+import {debounce} from "@/utils/utils";
 
 interface GifModalProps {
     isVisible: boolean;
