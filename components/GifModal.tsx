@@ -3,6 +3,7 @@ import { View, TextInput, FlatList, Pressable, StyleSheet, Dimensions, Modal } f
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { Text } from '~/components/ui/text';
+import {debounce} from "@/app/utils/utils";
 
 interface GifModalProps {
     isVisible: boolean;
@@ -16,14 +17,6 @@ const GifModal: React.FC<GifModalProps> = ({ isVisible, onClose, onSelectGif }) 
     const [pos, setPos] = useState<string>('');  // Position for pagination (Tenor's `pos` parameter)
     const [hasMore, setHasMore] = useState<boolean>(true);
     const [loading, setLoading] = useState<boolean>(false);
-
-    const debounce = (func: Function, delay: number) => {
-        let timer: NodeJS.Timeout;
-        return (...args: any[]) => {
-            if (timer) clearTimeout(timer);
-            timer = setTimeout(() => func(...args), delay);
-        };
-    };
 
     const debouncedSearchGifs = useRef(
         debounce(async (searchTerm: string, pos: string) => {

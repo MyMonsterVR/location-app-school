@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Image} from 'expo-image';
-import {FlatList, Pressable, StyleSheet, TextInput, View} from 'react-native';
+import {Pressable, StyleSheet, TextInput, View} from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {Text} from '@/components/ui/text';
@@ -9,6 +10,7 @@ import GifModal from '@/components/GifModal';
 import {useAuth, useUser} from '@clerk/clerk-expo';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {router, useLocalSearchParams} from "expo-router";
+import {debounce} from "@/app/utils/utils";
 
 const SERVER_URL = `${process.env.EXPO_PUBLIC_SERVER_URL}`;
 
@@ -41,13 +43,18 @@ const Chat: React.FC = () => {
     const [message, setMessage] = useState<string>('');
     const [roomId, setRoomId] = useState<string>('');
     const [isGifModalVisible, setIsGifModalVisible] = useState<boolean>(false);
-    const [readMessages, setReadMessages] = useState<string[]>([]);
+    const [readMessages, setReadMessages] = useState<Set<string[]>>(new Set());
     const [chatTitle, setChatTitle] = useState<string[]>([]);
     const [roomType, setRoomType] = useState<string>('single');
     const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
+    const [hasScrolled, setHasScrolled] = useState<boolean>(false);
+
+    const ITEM_HEIGHT = 70;
+
     const { userId, getToken } = useAuth();
     const { user } = useUser();
-    const flatListRef = useRef(null);
+
+    const flashListRef = useRef<FlashList<any>>(null);
     const ws = useRef<WebSocket | null>(null);
 
     // region TODO: MOVE TO WHEN APP STARTS
@@ -104,6 +111,8 @@ const Chat: React.FC = () => {
         ws.current.onopen = () => {
             console.log('WebSocket connected');
             setMessages([]);  // Clear messages when connecting to a new room
+            setIsReconnecting(false);  // Reset reconnecting state
+            setHasScrolled(false);  // Reset scroll state
             ws.current?.send(
                 JSON.stringify({
                     type: 'join',
@@ -145,7 +154,12 @@ const Chat: React.FC = () => {
                 setMessages((prev) =>
                     prev.map((msg) =>
                         msg._id === data.messageId
-                            ? { ...msg, readBy: [...msg.readBy, data.userId] }
+                            ? {
+                                ...msg, message: {
+                                    ...msg.message,
+                                    readBy: [...msg.message.readby, data.userId]
+                                }
+                            }
                             : msg
                     )
                 );
@@ -332,8 +346,142 @@ const Chat: React.FC = () => {
 
     // Scroll to the bottom of the chat when new messages are added
     useEffect(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
+        clearOldCache();
+        console.log('reload')
+        if (messages.length > 0 && flashListRef.current && !hasScrolled) {
+            flashListRef.current.scrollToIndex({ index: messages.length - 1, animated: false });
+        }
+    }, [messages.length]);
+
+    // on scrolling away from the bottom, set hasScrolled to true
+    const onScroll = (event) => {
+        const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+        const paddingToBottom = 20;
+
+        debounce(() => {
+            setHasScrolled(
+                contentSize.height - layoutMeasurement.height - paddingToBottom > contentOffset.y
+            );
+        }, 100)();
+    }
+
+    const GifMessage = React.memo(({ gifUrl }) => {
+        return (
+            <Image
+                source={{ uri: gifUrl }}
+                style={styles.gifMessage}
+                contentFit="contain"
+                transition={300}
+                cachePolicy="memory-disk"
+                priority="high"
+            />
+        );
+    });
+
+    const MessageContent = React.memo(({ item }) => {
+        if (item.message.messageType === 'text') {
+            return <Text style={styles.messageText}>{item.message.text}</Text>;
+        } else if (item.message.messageType === 'gif') {
+            return <GifMessage gifUrl={item.message.text} />;
+        }
+    });
+
+    const fetchOlderMessages = async (roomId: string, lastMessageTimestamp: number, limit: number = 20) => {
+        try {
+            const response = await fetch(`http://${SERVER_URL}/messages/${roomId}?before=${lastMessageTimestamp}&limit=${limit}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${await getToken()}`,
+                },
+            });
+
+            setIsReconnecting(false);
+            if (!response.ok) {
+                throw new Error('Failed to fetch older messages');
+            }
+            const data = await response.json();
+            return data.messages;
+        } catch (error) {
+            console.error('Error fetching older messages:', error);
+            return [];
+        }
+    };
+
+    const loadOlderMessages = useCallback(async () => {
+        setIsReconnecting(true);
+
+        const firstMessageTimestamp = new Date(messages[0]?.createdAt).getTime();
+        const olderMessages = await fetchOlderMessages(roomId, firstMessageTimestamp, 20);
+
+        if (olderMessages.length > 0) {
+            // Only update if there are new messages
+            setMessages((prevMessages) => {
+                const newMessages = olderMessages.filter(msg => !prevMessages.some(p => p._id === msg._id));
+                return [...newMessages, ...prevMessages];
+            });
+        }
     }, [messages]);
+
+
+    const debouncedMarkAsRead = useRef(
+        debounce(async (messageId: string) => {
+            const response = await fetch(`http://${SERVER_URL}/read`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${await getToken()}`,
+                },
+                body: JSON.stringify({
+                    room: roomId,
+                    messageId,
+                    userId,
+                }),
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                // Update only the `readBy` field for the message without affecting other fields
+                setMessages((prevMessages) =>
+                    prevMessages.map((msg) =>
+                        msg._id === messageId
+                            ? {
+                                ...msg,
+                                message: {
+                                    ...msg.message,
+                                    readBy: [...msg.message.readBy, userId],  // Add userId to readBy
+                                },
+                            }
+                            : msg
+                    )
+                );
+            }
+        }, 1000)
+    ).current;
+
+    const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: any[] }) => {
+        const viewableMessageIds = viewableItems.map(item => item.item._id);
+
+        // Only mark as read if they haven't been read yet
+        const newReadMessages = viewableMessageIds.filter(
+            (messageId) => !readMessages.has(messageId)
+        );
+
+        if (newReadMessages.length > 0) {
+            // Mark messages as read in batches (debounced)
+            newReadMessages.forEach((messageId) => {
+                debouncedMarkAsRead(messageId);
+            });
+
+            // Update `readMessages` without affecting the entire state
+            setReadMessages((prev) => new Set([...prev, ...newReadMessages]));
+        }
+    });
+
+    const viewabilityConfig = {
+        waitForInteraction: true,
+        viewAreaCoveragePercentThreshold: 50,
+    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -351,19 +499,18 @@ const Chat: React.FC = () => {
             </View>
 
             <View style={styles.chatArea}>
-                <FlatList
-                    ref={flatListRef}
+                <FlashList
+                    ref={flashListRef}
                     data={messages}
-                    keyExtractor={(item, index) => index.toString()}
+                    keyExtractor={(item) => item._id.toString()}  // Make sure to use a unique key like message ID
                     renderItem={({ item, index }) => {
-                        const user = item.user; // Directly access the 'user' object
-                        if (!user) return null; // If 'user' is undefined, don't render the message
+                        const user = item.user;
+                        if (!user) return null;
 
                         const showUsername = index === 0 || (messages[index - 1]?.user?.userId !== user.userId);
                         const isMessageRead = Array.isArray(item.readBy) && item.readBy.includes(userId);
                         const isLastMessageInRow = index === messages.length - 1 || messages[index + 1]?.user?.userId !== user.userId;
                         const isOwnMessage = user.userId === userId;
-                        const readByUsers = Array.isArray(item.readBy) ? item.readBy.slice(0, 2) : [];
 
                         return (
                             <View
@@ -392,20 +539,12 @@ const Chat: React.FC = () => {
                                 )}
 
                                 {/* Message Type: Text or GIF */}
-                                {item.message.messageType === 'text' ? (
-                                    <Text style={styles.messageText}>{item.message.text}</Text>
-                                ) : (
-                                    <Image
-                                        source={{ uri: item.message.text }}
-                                        style={styles.gifMessage}
-                                        cachePolicy="memory-disk"
-                                    />
-                                )}
+                                <MessageContent item={item} />
 
                                 {/* Read Status */}
                                 {isOwnMessage && isLastMessageInRow && (
                                     <View style={styles.readStatusContainer}>
-                                        {readByUsers.map((readUserId, idx) => (
+                                        {item.readBy?.slice(0, 2).map((readUserId, idx) => (
                                             <View
                                                 key={readUserId}
                                                 style={[
@@ -422,6 +561,13 @@ const Chat: React.FC = () => {
                         );
                     }}
                     contentContainerStyle={styles.messagesContainer}
+                    onScroll={onScroll}
+                    estimatedItemSize={ITEM_HEIGHT}
+                    onViewableItemsChanged={onViewableItemsChanged.current}
+                    viewabilityConfig={viewabilityConfig}
+                    onEndReachedThreshold={0.1}
+                    onRefresh={loadOlderMessages}
+                    refreshing={isReconnecting}
                 />
             </View>
 
