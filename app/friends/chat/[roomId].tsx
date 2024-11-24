@@ -11,6 +11,7 @@ import {useAuth, useUser} from '@clerk/clerk-expo';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {router, useLocalSearchParams} from "expo-router";
 import {debounce} from "@/utils/utils";
+import { useTheme } from '@react-navigation/native';
 
 const SERVER_URL = `${process.env.EXPO_PUBLIC_SERVER_URL}`;
 
@@ -56,6 +57,8 @@ const Chat: React.FC = () =>
 
     const {userId, getToken} = useAuth();
     const {user} = useUser();
+
+    const theme = useTheme();
 
     const flashListRef = useRef<FlashList<any>>(null);
     const ws = useRef<WebSocket | null>(null);
@@ -552,14 +555,17 @@ const Chat: React.FC = () =>
         viewAreaCoveragePercentThreshold: 50,
     };
 
-    const renderItem = useCallback(({item, index}) =>
-    {
+    const renderItem = useCallback(({item, index}) => {
         const user = item.user;
         if (!user) return null;
 
-        const showUsername = index === 0 || (messages[index - 1]?.user?.userId !== user.userId);
         const isOwnMessage = user.userId === userId;
-        const isLastMessageInRow = index === messages.length - 1 || messages[index + 1]?.user?.userId !== user.userId;
+
+        // Check if the previous message's user is the same as the current
+        const isPreviousUserSame = index > 0 && messages[index - 1]?.user?.userId === user.userId;
+
+        // Show username only for the first message in a series from the same sender
+        const showUsername = !isPreviousUserSame;
 
         return (
             <View
@@ -571,15 +577,11 @@ const Chat: React.FC = () =>
                 ]}
             >
                 {/* Display Username */}
-                {user.userId !== userId && showUsername && (
-                    <View style={styles.messageHeader}>
-                        <Text style={styles.username}>{user.username || 'Unknown'}</Text>
-                    </View>
-                )}
-
-                {isOwnMessage && showUsername && (
-                    <View style={styles.messageHeaderRight}>
-                        <Text style={styles.username}>{'Me'}</Text>
+                {showUsername && (
+                    <View style={isOwnMessage ? styles.messageHeaderRight : styles.messageHeader}>
+                        <Text style={styles.username(theme, item.message.messageType === 'text')}>
+                            {isOwnMessage ? 'Me' : user.username || 'Unknown'}
+                        </Text>
                     </View>
                 )}
 
@@ -590,8 +592,9 @@ const Chat: React.FC = () =>
                     <GifMessage gifUrl={item.message.text}/>
                 ) : null}
 
+                {/* Additional UI elements (like read status) can stay as is */}
                 {/* Read Status */}
-                {isOwnMessage && isLastMessageInRow && (
+                {isOwnMessage && index === messages.length - 1 && (
                     <View style={styles.readStatusContainer}>
                         {item.readBy?.slice(0, 2).map((readUserId, idx) => (
                             <View
@@ -611,17 +614,17 @@ const Chat: React.FC = () =>
     }, [userId]);
 
     return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.navbar}>
+        <SafeAreaView style={styles.container(theme)}>
+            <View style={styles.navbar(theme)}>
                 <Pressable onPress={() => router.push('/friends')}>
-                    <Icon name="arrow-back" size={24} color="#fff"/>
+                    <Icon name="arrow-back" size={24} color={theme.colors.icons}/>
                 </Pressable>
                 <View style={styles.friendInfoContainer}>
                     <ProfilePicture userId={userId} styling={styles.profileAvatar}/>
-                    <Text style={styles.friendUsername}>{chatTitle}</Text>
+                    <Text style={styles.friendUsername(theme)}>{chatTitle}</Text>
                 </View>
                 <Pressable onPress={() => console.log("Settings")}>
-                    <Icon name="settings" size={24} color="#fff"/>
+                    <Icon name="settings" size={24} color={theme.colors.icons}/>
                 </Pressable>
             </View>
 
@@ -644,9 +647,9 @@ const Chat: React.FC = () =>
             </View>
 
             {/* Message Input Area */}
-            <View style={styles.inputContainer}>
+            <View style={styles.inputContainer(theme)}>
                 <Pressable onPress={() => setIsGifModalVisible(true)} style={styles.gifButton}>
-                    <Icon name="image" size={24} color="#fff"/>
+                    <Icon name="image" size={24} color={theme.colors.icons}/>
                 </Pressable>
                 <TextInput
                     value={message}
@@ -668,12 +671,12 @@ const Chat: React.FC = () =>
 };
 
 const styles = StyleSheet.create({
-    container: {
+    container: (theme) => ({
         flex: 1,
-        backgroundColor: '#222',
-    },
-    navbar: {
-        backgroundColor: '#333',
+        backgroundColor: theme.colors.background,
+    }),
+    navbar: (theme) => ({
+        backgroundColor: theme.colors.background,
         paddingTop: 10,
         paddingBottom: 10,
         paddingHorizontal: 15,
@@ -684,7 +687,7 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#444',
         borderRadius: 10,
-    },
+    }),
     friendInfoContainer: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -699,12 +702,12 @@ const styles = StyleSheet.create({
         borderColor: '#fff',
         marginRight: 10,
     },
-    friendUsername: {
+    friendUsername: (theme) => ({
         fontSize: 18,
-        color: '#fff',
+        color: theme.colors.text,
         fontWeight: 'bold',
         flexWrap: 'wrap',
-    },
+    }),
     chatArea: {
         flex: 1,
         padding: 10,
@@ -749,24 +752,24 @@ const styles = StyleSheet.create({
         marginBottom: 8,
         justifyContent: 'flex-end',
     },
-    username: {
-        color: '#fff',
+    username: (theme, hasBackground) => ({
+        color: hasBackground ? '#fff' : theme.colors.text,
         fontSize: 14,
         fontWeight: 'bold',
-    },
+    }),
     messageText: {
         color: '#fff',
         fontSize: 16,
         lineHeight: 20,
     },
-    inputContainer: {
+    inputContainer: (theme) => ({
         borderTopWidth: 1,
         borderTopColor: '#444',
         padding: 10,
-        backgroundColor: '#333',
+        backgroundColor: theme.colors.background,
         flexDirection: 'row',
         alignItems: 'center',
-    },
+    }),
     input: {
         backgroundColor: '#fff',
         borderRadius: 20,

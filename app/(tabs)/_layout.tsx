@@ -1,82 +1,31 @@
 import '@/global.css';
-import { NAV_THEME } from '@/lib/constants';
-import { useColorScheme } from '@/lib/useColorScheme';
-import {SplashScreen, Tabs, useFocusEffect} from 'expo-router';
+import {Tabs} from 'expo-router';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import {getItem, setItem} from "@/utils/AsyncStorage";
-import {Theme, ThemeProvider} from "@react-navigation/native";
-import {useCallback, useEffect, useState} from "react";
+import {useTheme} from "@react-navigation/native";
 
-const LIGHT_THEME: Theme = {
-    dark: false,
-    colors: NAV_THEME.light,
-};
-const DARK_THEME: Theme = {
-    dark: true,
-    colors: NAV_THEME.dark,
-};
+export default () =>
+{
 
-export {
-    // Catch any errors thrown by the Layout component.
-    ErrorBoundary,
-} from 'expo-router';
-
-SplashScreen.preventAutoHideAsync();
-
-export default () => {
-    const { colorScheme, setColorScheme, isDarkColorScheme } = useColorScheme();
-    const [isColorSchemeLoaded, setIsColorSchemeLoaded] = useState(false);
-
-
-    useEffect(() => {
-        const loadTheme = async () => {
-            const theme = await getItem('theme');
-            if (theme) {
-                setColorScheme(theme);
-            }
-            setIsColorSchemeLoaded(true);
-            SplashScreen.hideAsync();
-        };
-
-        loadTheme();
-    }, []);
-
-    useEffect(() => {
-        const saveTheme = async () => {
-            if (isDarkColorScheme) {
-                await setItem('theme', 'dark');
-            } else {
-                await setItem('theme', 'light');
-            }
-        };
-
-        saveTheme();
-    }, [isDarkColorScheme]);
-
-    if (!isColorSchemeLoaded) {
-        return null;
-    }
+    const theme = useTheme();
 
     return (
-        <ThemeProvider value={isDarkColorScheme ? DARK_THEME : LIGHT_THEME}>
-            <Tabs screenOptions={{
-                headerShown: false,
-                tabBarInactiveBackgroundColor: isDarkColorScheme ? 'hsl(240,4%,14%)' : 'hsl(0,3%,94%)',
-                tabBarActiveBackgroundColor: isDarkColorScheme ? 'hsl(240,5%,22%)' : 'hsl(0,0%,100%)',
-            }}>
-                <Tabs.Screen name="friends" options={{
-                    title: 'Friends',
-                    tabBarIcon: ({ color }) => <FontAwesome size={28} name="users" color="gray" />,
-                }}/>
-                <Tabs.Screen name="map" options={{
-                    title: 'Map',
-                    tabBarIcon: ({ color }) => <FontAwesome size={28} name="map" color="gray" />,
-                }}/>
-                <Tabs.Screen name="settings" options={{
-                    title: 'Settings',
-                    tabBarIcon: ({ color }) => <FontAwesome size={28} name="cog" color="gray" />,
-                }}/>
-            </Tabs>
-        </ThemeProvider>
+        <Tabs screenOptions={{
+            headerShown: false,
+            tabBarInactiveBackgroundColor: theme.colors.tabBarInactiveBackgroundColor,
+            tabBarActiveBackgroundColor: theme.colors.tabBarActiveBackgroundColor,
+        }}>
+            <Tabs.Screen name="friends" options={{
+                title: 'Friends',
+                tabBarIcon: ({color}) => <FontAwesome size={28} name="users" color="gray"/>,
+            }}/>
+            <Tabs.Screen name="map" options={{
+                title: 'Map',
+                tabBarIcon: ({color}) => <FontAwesome size={28} name="map" color="gray"/>,
+            }}/>
+            <Tabs.Screen name="settings" options={{
+                title: 'Settings',
+                tabBarIcon: ({color}) => <FontAwesome size={28} name="cog" color="gray"/>,
+            }}/>
+        </Tabs>
     );
 };
