@@ -4,7 +4,7 @@ import {Theme, ThemeProvider} from "@react-navigation/native";
 import { NAV_THEME } from '@/lib/constants';
 import { useColorScheme } from '@/lib/useColorScheme';
 import { SplashScreen } from 'expo-router';
-import { getItem, setItem } from "@/app/utils/AsyncStorage";
+import { getItem, setItem } from "@/utils/AsyncStorage";
 
 const LIGHT_THEME: Theme = {
     dark: false,

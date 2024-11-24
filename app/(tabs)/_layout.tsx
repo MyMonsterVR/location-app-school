@@ -1,11 +1,11 @@
 import '@/global.css';
 import { NAV_THEME } from '@/lib/constants';
 import { useColorScheme } from '@/lib/useColorScheme';
-import {SplashScreen, Tabs} from 'expo-router';
+import {SplashScreen, Tabs, useFocusEffect} from 'expo-router';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import React from "react";
-import {getItem, setItem} from "@/app/utils/AsyncStorage";
+import {getItem, setItem} from "@/utils/AsyncStorage";
 import {Theme, ThemeProvider} from "@react-navigation/native";
+import {useCallback, useEffect, useState} from "react";
 
 const LIGHT_THEME: Theme = {
     dark: false,
@@ -25,28 +25,33 @@ SplashScreen.preventAutoHideAsync();
 
 export default () => {
     const { colorScheme, setColorScheme, isDarkColorScheme } = useColorScheme();
-    const [isColorSchemeLoaded, setIsColorSchemeLoaded] = React.useState(false);
+    const [isColorSchemeLoaded, setIsColorSchemeLoaded] = useState(false);
 
-    React.useEffect(() => {
-        (async () => {
+
+    useEffect(() => {
+        const loadTheme = async () => {
             const theme = await getItem('theme');
-            if (!theme) {
-                await setItem('theme', colorScheme);
-                setIsColorSchemeLoaded(true);
-                return;
-            }
-            const colorTheme = theme === 'dark' ? 'dark' : 'light';
-            if (colorTheme !== colorScheme) {
-                setColorScheme(colorTheme);
-
-                setIsColorSchemeLoaded(true);
-                return;
+            if (theme) {
+                setColorScheme(theme);
             }
             setIsColorSchemeLoaded(true);
-        })().finally(() => {
             SplashScreen.hideAsync();
-        });
+        };
+
+        loadTheme();
     }, []);
+
+    useEffect(() => {
+        const saveTheme = async () => {
+            if (isDarkColorScheme) {
+                await setItem('theme', 'dark');
+            } else {
+                await setItem('theme', 'light');
+            }
+        };
+
+        saveTheme();
+    }, [isDarkColorScheme]);
 
     if (!isColorSchemeLoaded) {
         return null;

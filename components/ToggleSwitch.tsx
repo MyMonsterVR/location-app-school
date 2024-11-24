@@ -1,6 +1,6 @@
 import React from "react";
 import {StyleSheet, Switch} from "react-native";
-import {getItem, setItem} from "@/app/utils/AsyncStorage";
+import {getItem, setItem} from "@/utils/AsyncStorage";
 
 export function ToggleSwitch({Option, callback}: {Option: string, callback: () => boolean}) {
     const [isEnabled, setIsEnabled] = React.useState(false);
