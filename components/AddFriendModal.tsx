@@ -11,7 +11,7 @@ interface AddFriendModalProps {
 
 const AddFriendModal: React.FC<AddFriendModalProps> = ({ isVisible, onClose, onAddFriend }) => {
     const [friendUsername, setFriendUsername] = useState('');
-    const { getToken } = useAuth();
+    const { userId, getToken } = useAuth();
 
     const handleAddFriend = async () => {
         if (!friendUsername.trim()) {
@@ -62,7 +62,7 @@ const AddFriendModal: React.FC<AddFriendModalProps> = ({ isVisible, onClose, onA
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`,
                     },
-                    body: JSON.stringify({ friendUserId }),
+                    body: JSON.stringify({ userId, friendUserId }),
                 }
             );
 

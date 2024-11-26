@@ -10,6 +10,7 @@ import {Theme, ThemeProvider} from "@react-navigation/native";
 import {NAV_THEME} from "@/lib/constants";
 
 
+
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!
 const tokenCache = {
     async getToken(key: string) {
@@ -51,6 +52,7 @@ export interface TokenCache {
 }
 
 function InitialLayout() {
+    const [origin, setOrigin] = useState<OriginLocation | null>(null);
     const { isLoaded, isSignedIn } = useAuth();
     const segment = useSegments();
     const router = useRouter();
@@ -67,6 +69,7 @@ function InitialLayout() {
             router.replace('/login');
         }
     }, [isSignedIn])
+
     return <Slot />;
 }
 

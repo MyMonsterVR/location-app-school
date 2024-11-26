@@ -27,6 +27,7 @@ export const useFriends = (userId: string | null, getToken: () => Promise<string
             const data = await response.json();
             setFriends(data.friends || []);
         } catch (err) {
+            console.error(err);
             setError(err instanceof Error ? err : new Error('An error occurred'));
         } finally {
             setIsLoading(false);

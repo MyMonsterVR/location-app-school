@@ -18,6 +18,7 @@ import {getItem, setItem} from "@/utils/AsyncStorage";
 import Speedometer from "@/components/Speedometer";
 import {debounce} from "@/utils/utils";
 import {darkModeMapStyling, trackModeMapStyling} from "@/lib/mapStyles";
+import {useAuth} from "@clerk/clerk-expo";
 
 const GOOGLE_MAPS_APIKEY = process.env.EXPO_PUBLIC_GOOGLE_API;
 
@@ -40,6 +41,8 @@ export default function Map()
     const stationaryTimer = useRef(null);
     const stationaryThreshold = 10;
     const stationaryTimeout = 2000;
+    const {userId, getToken} = useAuth();
+
 
     const mapDarkMode = darkModeMapStyling
     const mapTrackMode = trackModeMapStyling
@@ -256,6 +259,35 @@ export default function Map()
             };
         })();
     }, [destination]);
+
+    const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL;
+
+    // every minute, send a request to the server to update the user's location
+    useEffect(() => {
+        const interval = setInterval(() => {
+            if (origin) {
+                fetch(`http://${SERVER_URL}/user/location`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${getToken()}`,
+                    },
+                    body: JSON.stringify({
+                        userId,
+                        latitude: origin.latitude ?? 0,
+                        longitude: origin.longitude ?? 0,
+                    }),
+                }).then((response) => {
+                    if (!response.ok) {
+                        throw new Error('Failed to update location');
+                    }
+                }).catch((error) => {
+                    console.error('Error updating location:', error);
+                });
+            }
+        }, 10000);
+        return () => clearInterval(interval);
+    }, []);
 
     useEffect(() =>
     {

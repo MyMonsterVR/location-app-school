@@ -54,9 +54,9 @@ const Friends: React.FC = () => {
                     <Text style={[styles.pageTitle, { color: theme.colors.text }]}>Friends</Text>
                     <Pressable
                         onPress={() => setModalVisible(true)}
-                        style={[styles.addFriendButton, { backgroundColor: theme.colors.text }]}
+                        style={[styles.addFriendButton]}
                     >
-                        <Icon name="person-add" size={24} color={theme.colors.text} />
+                        <Icon name="person-add" size={24} color={theme.colors.icon} />
                     </Pressable>
                 </View>
 
