@@ -30,7 +30,7 @@ const Friends: React.FC = () => {
     if (error) {
         return (
             <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-                <Text style={[styles.errorText, { color: theme.colors.error }]}>
+                <Text style={[styles.errorText, { color: theme.colors.text }]}>
                     Error loading friends. Please try again later.
                 </Text>
             </SafeAreaView>
@@ -54,7 +54,7 @@ const Friends: React.FC = () => {
                     <Text style={[styles.pageTitle, { color: theme.colors.text }]}>Friends</Text>
                     <Pressable
                         onPress={() => setModalVisible(true)}
-                        style={[styles.addFriendButton, { backgroundColor: theme.colors.secondary }]}
+                        style={[styles.addFriendButton, { backgroundColor: theme.colors.text }]}
                     >
                         <Icon name="person-add" size={24} color={theme.colors.text} />
                     </Pressable>
