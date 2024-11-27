@@ -29,18 +29,24 @@ export default function Map()
     const [searchText, setSearchText] = useState<string | null>(null);
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    const [mapTheme, setMapTheme] = useState<Record<string, unknown>[]>([]);
+    const [recentRoutes, setRecentRoutes] = useState<string[]>([]);
+
     const [isSearchModalVisible, setSearchModalVisible] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const [mapTheme, setMapTheme] = useState<Record<string, unknown>[]>([]);
     const [darkModeEnabled, setDarkModeEnabled] = useState(false);
     const [trackModeEnabled, setTrackModeEnabled] = useState(false);
-    const mapRef = useRef<MapView | null>(null);
-    const [recentRoutes, setRecentRoutes] = useState<string[]>([]);
+    const [isThrottled, setIsThrottled] = useState(false);
     const [speed, setSpeed] = useState(0);
+
+    const mapRef = useRef<MapView | null>(null);
     const lastPosition = useRef(null);
     const stationaryTimer = useRef(null);
+
     const stationaryThreshold = 10;
     const stationaryTimeout = 2000;
+    const throttleDuration = 5000; // 5 seconds
+
     const {userId, getToken} = useAuth();
 
 
@@ -260,34 +266,56 @@ export default function Map()
         })();
     }, [destination]);
 
+    const updateLocationDBThrottle = async (latitude, longitude) => {
+        if (isThrottled) return; // Prevent further calls if throttled
+
+        setIsThrottled(true); // Set throttling on
+        await updateLocationDB(latitude, longitude);
+
+        // Set a timer to reset the throttle after a duration
+        setTimeout(() => {
+            setIsThrottled(false);
+        }, throttleDuration);
+    };
+
+    useEffect(() => {
+        if (origin) {
+            updateLocationDBThrottle(origin.latitude, origin.longitude);
+        }
+    }, [origin]);
+
     const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL;
 
-    // every minute, send a request to the server to update the user's location
-    useEffect(() => {
-        const interval = setInterval(() => {
-            if (origin) {
-                fetch(`http://${SERVER_URL}/user/location`, {
+    const updateLocationDB = async (latitude: number, longitude: number) =>
+    {
+        if(!userId) return;
+
+        if(!latitude || !longitude) return;
+
+        try
+        {
+            const token = await getToken();
+            const response = await fetch(
+                `http://${SERVER_URL}/user/location`,
+                {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${getToken()}`,
+                        'Authorization': `Bearer ${token}`,
                     },
-                    body: JSON.stringify({
-                        userId,
-                        latitude: origin.latitude ?? 0,
-                        longitude: origin.longitude ?? 0,
-                    }),
-                }).then((response) => {
-                    if (!response.ok) {
-                        throw new Error('Failed to update location');
-                    }
-                }).catch((error) => {
-                    console.error('Error updating location:', error);
-                });
+                    body: JSON.stringify({userId, latitude, longitude}),
+                }
+            );
+
+            if (!response.ok)
+            {
+                throw new Error('Failed to update location');
             }
-        }, 10000);
-        return () => clearInterval(interval);
-    }, []);
+        } catch (error)
+        {
+            console.error('Error updating location:', error);
+        }
+    }
 
     useEffect(() =>
     {
