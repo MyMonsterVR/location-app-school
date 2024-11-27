@@ -11,7 +11,7 @@ import {
     Pressable
 } from 'react-native';
 import MapViewDirections from 'react-native-maps-directions';
-import MapView, {LatLng, PROVIDER_GOOGLE} from 'react-native-maps';
+import MapView, {LatLng, Marker, PROVIDER_GOOGLE} from 'react-native-maps';
 import * as Location from 'expo-location';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {getItem, setItem} from "@/utils/AsyncStorage";
@@ -19,6 +19,8 @@ import Speedometer from "@/components/Speedometer";
 import {debounce} from "@/utils/utils";
 import {darkModeMapStyling, trackModeMapStyling} from "@/lib/mapStyles";
 import {useAuth} from "@clerk/clerk-expo";
+import { useFriends } from "@/hooks/useFriends";
+import FriendMarker from "@/components/FriendMarker";
 
 const GOOGLE_MAPS_APIKEY = process.env.EXPO_PUBLIC_GOOGLE_API;
 
@@ -31,6 +33,7 @@ export default function Map()
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [mapTheme, setMapTheme] = useState<Record<string, unknown>[]>([]);
     const [recentRoutes, setRecentRoutes] = useState<string[]>([]);
+    const [friendLocations, setFriendLocations] = useState<any[]>([]);
 
     const [isSearchModalVisible, setSearchModalVisible] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -48,6 +51,7 @@ export default function Map()
     const throttleDuration = 5000; // 5 seconds
 
     const {userId, getToken} = useAuth();
+    const { friends } = useFriends(userId as string, getToken);
 
 
     const mapDarkMode = darkModeMapStyling
@@ -63,11 +67,11 @@ export default function Map()
     };
 
     // Save recent route with destination address only
-    const saveRecentRoute = async (destinationAddress: string) =>
+    const saveRecentRoute = async (coords: DestinationLocation, destinationAddress: string) =>
     {
         const routes = await getItem('@recent_routes');
         const savedRoutes = routes ? JSON.parse(routes) : [];
-        const newRoute = {destination: destinationAddress};
+        const newRoute = {coords, destination: destinationAddress};
 
         // Avoid adding duplicates
         if (!savedRoutes.some(route => route.destination === destinationAddress))
@@ -125,12 +129,13 @@ export default function Map()
                 const location = json.result.geometry.location;
                 const address = json.result.formatted_address;
 
-                setDestination({latitude: location.lat, longitude: location.lng});
+                const coords = {latitude: location.lat, longitude: location.lng}
+
+                setDestination(coords);
                 setSearchResults([]);
                 setSearchModalVisible(false);
 
-                const originAddress = origin ? `${origin.latitude}, ${origin.longitude}` : "Current Location";
-                await saveRecentRoute(address);
+                await saveRecentRoute(coords, address);
             }
         } catch (error)
         {
@@ -317,6 +322,9 @@ export default function Map()
             {
                 throw new Error('Failed to update location');
             }
+
+            // fetch locations
+            await fetchFriendLocations()
         } catch (error)
         {
             console.error('Error updating location:', error);
@@ -341,9 +349,30 @@ export default function Map()
         )
     }, [darkModeEnabled, trackModeEnabled]);
 
+    const fetchFriendLocations = async () =>
+    {
+        const locations = await fetch(`http://${SERVER_URL}/friends/locations`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getToken()}`,
+            },
+            body: JSON.stringify({ userIds: friends.map(friend => friend.userId) }),
+        });
+
+        if (!locations.ok)
+        {
+            throw new Error('Failed to fetch locations');
+        }
+
+        const data = await locations.json();
+        setFriendLocations(data.locations || []);
+    }
+
     useEffect(() =>
     {
         loadRecentRoutes();
+        fetchFriendLocations();
     }, []);
 
     let text = 'Waiting...';
@@ -379,6 +408,22 @@ export default function Map()
                         strokeColor="#34a4eb"
                     />
                 )}
+                {destination && (
+                    <Marker
+                        coordinate={destination}
+                        title="Destination"
+                        description="Your destination"
+                    />
+                )}
+                {friendLocations.map((location, index) => (
+                    <Marker
+                        key={index}
+                        coordinate={location.coords}
+                        onPress={() => console.log('Friend location:', location)}
+                    >
+                        <FriendMarker userId={location.userId}/>
+                    </Marker>
+                ))}
             </MapView>
             <Speedometer speed={speed}/>
             <TouchableOpacity style={styles.searchIconButton} onPress={() => setSearchModalVisible(true)}>
@@ -405,7 +450,7 @@ export default function Map()
                                 renderItem={({item}) => (
                                     <TouchableOpacity onPress={() =>
                                     {
-                                        setDestination(item.destination); // Set destination when clicked.
+                                        setDestination(item.coords); // Set destination when clicked.
                                         setSearchModalVisible(false); // Close the modal
                                     }}>
                                         <View style={styles.resultItem}>
