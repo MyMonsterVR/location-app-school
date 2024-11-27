@@ -63,13 +63,15 @@ export default function Map()
     };
 
     // Save recent route with destination address only
-    const saveRecentRoute = async (destinationAddress: string) => {
+    const saveRecentRoute = async (destinationAddress: string) =>
+    {
         const routes = await getItem('@recent_routes');
         const savedRoutes = routes ? JSON.parse(routes) : [];
-        const newRoute = { destination: destinationAddress };
+        const newRoute = {destination: destinationAddress};
 
         // Avoid adding duplicates
-        if (!savedRoutes.some(route => route.destination === destinationAddress)) {
+        if (!savedRoutes.some(route => route.destination === destinationAddress))
+        {
             savedRoutes.unshift(newRoute);
             await setItem('@recent_routes', JSON.stringify(savedRoutes.slice(0, 5))); // Keep the last 5 routes
 
@@ -266,20 +268,24 @@ export default function Map()
         })();
     }, [destination]);
 
-    const updateLocationDBThrottle = async (latitude, longitude) => {
+    const updateLocationDBThrottle = async (latitude, longitude) =>
+    {
         if (isThrottled) return; // Prevent further calls if throttled
 
         setIsThrottled(true); // Set throttling on
         await updateLocationDB(latitude, longitude);
 
         // Set a timer to reset the throttle after a duration
-        setTimeout(() => {
+        setTimeout(() =>
+        {
             setIsThrottled(false);
         }, throttleDuration);
     };
 
-    useEffect(() => {
-        if (origin) {
+    useEffect(() =>
+    {
+        if (origin)
+        {
             updateLocationDBThrottle(origin.latitude, origin.longitude);
         }
     }, [origin]);
@@ -288,9 +294,9 @@ export default function Map()
 
     const updateLocationDB = async (latitude: number, longitude: number) =>
     {
-        if(!userId) return;
+        if (!userId) return;
 
-        if(!latitude || !longitude) return;
+        if (!latitude || !longitude) return;
 
         try
         {
@@ -396,14 +402,16 @@ export default function Map()
                             <FlatList
                                 data={recentRoutes}
                                 keyExtractor={(item, index) => index.toString()}
-                                renderItem={({ item }) => (
-                                    <TouchableOpacity onPress={() => {
+                                renderItem={({item}) => (
+                                    <TouchableOpacity onPress={() =>
+                                    {
                                         setDestination(item.destination); // Set destination when clicked.
                                         setSearchModalVisible(false); // Close the modal
                                     }}>
                                         <View style={styles.resultItem}>
                                             <View style={styles.resultItemContainer}>
-                                                <Icon name="time-outline" size={20} color="#FFA500" style={styles.recentIcon} />
+                                                <Icon name="time-outline" size={20} color="#FFA500"
+                                                      style={styles.recentIcon}/>
                                                 <Text style={styles.resultTitle}>{item.destination}</Text>
                                             </View>
                                         </View>
@@ -416,9 +424,11 @@ export default function Map()
                     <FlatList
                         data={searchResults}
                         keyExtractor={(item) => item.place_id}
-                        renderItem={({ item }) => (
-                            <TouchableOpacity onPress={() => {
-                                if (item.place_id) {
+                        renderItem={({item}) => (
+                            <TouchableOpacity onPress={() =>
+                            {
+                                if (item.place_id)
+                                {
                                     selectLocation(item.place_id);
                                 }
                             }}>
