@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Image, View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import {useTheme} from "@react-navigation/native";
 
 // Function to fetch the profile picture from your backend
 const getUserProfileImage = async (userId: string): Promise<string | null> => {
@@ -17,6 +18,7 @@ const getUserProfileImage = async (userId: string): Promise<string | null> => {
 const ProfilePicture: React.FC<{ userId: string, styling?: Record<string, string|number> }> = ({ userId, styling }) => {
     const [profileImage, setProfileImage] = useState<string | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
+    const theme = useTheme();
 
     useEffect(() => {
         const fetchProfileImage = async () => {
@@ -35,7 +37,7 @@ const ProfilePicture: React.FC<{ userId: string, styling?: Record<string, string
             {loading ? (
                 <ActivityIndicator size="large" color="#fff" />
             ) : profileImage ? (
-                <Image style={[styles.profileImage, styling]} source={{ uri: profileImage }} />
+                <Image style={[styles.profileImage(theme), styling]} source={{ uri: profileImage }} />
             ) : (
                 <Icon name="person-circle" size={45} color="#fff" />
                 )}
@@ -48,14 +50,14 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    profileImage: {
+    profileImage: (theme) => ({
         width: 45,
         height: 45,
         borderRadius: 50,
         resizeMode: 'cover',
         borderWidth: 2,
-        borderColor: '#fff',
-    },
+        borderColor: theme.colors.icon,
+    }),
 });
 
 export default ProfilePicture;
