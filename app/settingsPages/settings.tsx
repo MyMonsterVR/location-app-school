@@ -29,9 +29,9 @@ const Settings = () => {
     };
 
     const SettingItem = ({ icon, text, onPress, toggle }) => (
-        <TouchableOpacity style={styles.settingItem} onPress={onPress}>
+        <TouchableOpacity style={styles.settingItem(theme)} onPress={onPress}>
             <View style={styles.settingItemLeft}>
-                <Icon name={icon} size={24} color={theme.colors.text} style={styles.settingIcon} />
+                <Icon name={icon} size={24} color={theme.colors.text} style={styles.settingIcon(theme)} />
                 <Text style={styles.settingText}>{text}</Text>
             </View>
             {toggle ? toggle : <Icon name="chevron-forward" size={20} color={theme.colors.text} />}
@@ -109,21 +109,22 @@ const styles = StyleSheet.create({
         marginTop: 30,
         marginBottom: 15,
     },
-    settingItem: {
+    settingItem: (theme) => ({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingVertical: 15,
         borderBottomWidth: 1,
-        borderBottomColor: 'rgba(0,0,0,0.1)',
-    },
+        borderBottomColor: theme.colors.borderColor,
+    }),
     settingItemLeft: {
         flexDirection: 'row',
         alignItems: 'center',
     },
-    settingIcon: {
+    settingIcon: (theme) => ({
         marginRight: 15,
-    },
+        color: theme.colors.icon,
+    }),
     settingText: {
         fontSize: 16,
     },

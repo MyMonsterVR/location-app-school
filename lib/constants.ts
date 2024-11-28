@@ -8,6 +8,7 @@ export const NAV_THEME = {
         text: 'hsl(240 10% 3.9%)', // foreground
         icon: 'hsl(206,6%,44%)', // foreground
         button: 'hsl(201,100%,41%)',
+        borderColor: 'rgba(0,0,0,0.74)',
         tabBarInactiveBackgroundColor: 'hsl(0,3%,94%)',
         tabBarActiveBackgroundColor: 'hsl(0,0%,100%)',
     },
@@ -20,6 +21,7 @@ export const NAV_THEME = {
         text: 'hsl(0 0% 98%)', // foreground
         icon: 'hsl(207,6%,63%)', // foreground
         button: 'hsl(201,100%,41%)',
+        borderColor: 'rgba(220,212,212,0.74)',
         tabBarInactiveBackgroundColor: 'hsl(240,4%,14%)',
         tabBarActiveBackgroundColor: 'hsl(240,5%,22%)',
     },

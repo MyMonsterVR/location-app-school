@@ -8,12 +8,10 @@ import {Text} from '@/components/ui/text';
 import ProfilePicture from '@/components/ProfilePicture';
 import GifModal from '@/components/GifModal';
 import {useAuth, useUser} from '@clerk/clerk-expo';
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import {router, useLocalSearchParams} from "expo-router";
 import {debounce} from "@/utils/utils";
 import { useTheme } from '@react-navigation/native';
 import {useFriends} from "@/hooks/useFriends";
-import * as Location from 'expo-location';
 import LocationMessage from "@/components/LocationMessage";
 
 const SERVER_URL = `${process.env.EXPO_PUBLIC_SERVER_URL}`;
