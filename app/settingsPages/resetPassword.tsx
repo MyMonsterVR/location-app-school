@@ -40,7 +40,7 @@ const ResetPassword = () => {
                 <View style={styles.close}>
                     <Text style={styles.viewText}>Reset Password</Text>
                     <TouchableOpacity onPress={() => router.push("/(tabs)/settings")}>
-                        <Icon style={styles.icon} name="close" size={20} color="#fff" />
+                        <Icon style={{ color: theme.colors.icon}} name="close" size={20} color="#fff" />
                     </TouchableOpacity>
                 </View>
 
@@ -111,7 +111,6 @@ const styles = StyleSheet.create({
         padding: 30,
     },
     viewText: {
-        color: "#fff",
         fontSize: 20,
         fontWeight: "600",
     },

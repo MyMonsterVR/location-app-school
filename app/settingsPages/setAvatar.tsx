@@ -6,8 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Icon from "react-native-vector-icons/Ionicons";
 import * as ImagePicker from "expo-image-picker";
-import axios from "axios";
-import { useUser } from "@clerk/clerk-react";
+import { useUser, useAuth } from "@clerk/clerk-react";
 import {
     Dialog,
     DialogClose,
@@ -16,6 +15,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import ProfilePicture from "@/components/ProfilePicture";
 
 const SERVER_URL = `${process.env.EXPO_PUBLIC_SERVER_URL}`;
 
@@ -25,6 +25,7 @@ const SetAvatar = () => {
     const [uploading, setUploading] = useState(false);
     const [dialogVisible, setDialogVisible] = useState(false);
     const { user } = useUser();
+    const { userId } = useAuth();
 
     const handlePickAndUploadImage = async () => {
         const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -47,8 +48,6 @@ const SetAvatar = () => {
                 const mimeType = result.assets[0].mimeType; // Get the MIME type of the image (e.g., image/jpeg)
 
                 const image = `data:${mimeType};base64,${base64}`; // Format the base64 string into a proper data URI
-
-                console.log(image);
 
                 setImage(result.assets[0].uri); // Optionally set the image URI for preview
                 setUploading(true);
@@ -79,18 +78,15 @@ const SetAvatar = () => {
         <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
             <View>
                 <View style={styles.close}>
-                    <Text style={styles.viewText}>Set Avatar</Text>
+                    <Text style={styles.viewText}>Update Profile Picture</Text>
                     <TouchableOpacity onPress={() => router.push("/(tabs)/settings")}>
-                        <Icon style={styles.icon} name="close" size={20} color="#fff" />
+                        <Icon style={{ color: theme.colors.icon}} name="close" size={20} color="#fff" />
                     </TouchableOpacity>
                 </View>
 
                 <View style={styles.imageContainer}>
-                    {image ? (
-                        <Image
-                            source={{ uri: image }}
-                            style={styles.avatarImage}
-                        />
+                    {user.hasImage ? (
+                        <ProfilePicture userId={userId} styling={styles.avatarImage}/>
                     ) : (
                         <Text style={styles.placeholderText}>No image selected</Text>
                     )}
@@ -144,21 +140,19 @@ const styles = StyleSheet.create({
         fontSize: 20,
     },
     imageContainer: {
-        marginTop: 20,
         alignItems: "center",
-        display: "flex",
         justifyContent: "center",
+        marginTop: 20,
         height: 360,
         width: 360,
         borderRadius: 180,
-        overflow: "hidden",
-        backgroundColor: "#222",
+        alignSelf: "center",
     },
     avatarImage: {
-        width: "100%",
-        height: "100%",
-        borderRadius: 180,
-        alignSelf: "center",
+        width: 200,
+        height: 200,
+        borderRadius: 100,
+        marginRight: 10
     },
     placeholderText: {
         fontSize: 16,

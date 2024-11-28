@@ -43,7 +43,7 @@ const ResetUsername = () => {
                 <View style={styles.close}>
                     <Text style={styles.viewText}>Change Username</Text>
                     <TouchableOpacity onPress={() => router.push("/(tabs)/settings")}>
-                        <Icon style={styles.icon} name="close" size={20} color="#fff"/>
+                        <Icon style={{ color: theme.colors.icon}} name="close" size={20} color="#fff"/>
                     </TouchableOpacity>
                 </View>
 
@@ -94,7 +94,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     viewText: {
-        color: '#fff',
         fontSize: 20,
     },
     icon: {
@@ -104,10 +103,12 @@ const styles = StyleSheet.create({
         marginTop: 20,
     },
     input: {
-        backgroundColor: '#444',
         padding: 10,
-        borderRadius: 5,
         color: '#fff',
+        shadowColor: "#000",
+        borderWidth: 1,
+        borderColor: "#d1d5db",
+        borderRadius: 10,
     },
     resetButton: {
         backgroundColor: '#007bff',

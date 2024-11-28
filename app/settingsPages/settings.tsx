@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import {ScrollView, SafeAreaView, View, StyleSheet, TouchableOpacity} from 'react-native';
+import {ScrollView, SafeAreaView, View, StyleSheet, TouchableOpacity, Appearance} from 'react-native';
 import { Text } from '@/components/ui/text';
 import Icon from "react-native-vector-icons/Ionicons";
 import { ToggleSwitch } from '@/components/ToggleSwitch';
-import { useColorScheme } from "@/lib/useColorScheme";
 import { useAuth  } from '@clerk/clerk-expo';
 import {router} from "expo-router";
 import {
@@ -14,11 +13,13 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import {useTheme} from "@react-navigation/native";
+import setColorScheme = Appearance.setColorScheme;
 
 
 
 const Settings = () => {
-    const { setColorScheme } = useColorScheme();
+    const theme = useTheme();
     const { signOut } = useAuth();
 
     const [isSignOutDialogVisible, setSignOutDialogVisible] = useState(false);
@@ -40,33 +41,35 @@ const Settings = () => {
                 {/* Change Profile pic Button */}
                 <TouchableOpacity style={styles.optionButton} onPress={() => router.push('/settingsPages/setAvatar')}>
                     <Text style={styles.optionText}>Change Profile Picture</Text>
-                    <Icon style={styles.icon} name="chevron-forward" size={20} color="#fff"/>
+                    <Icon style={{ color: theme.colors.icon}} name="chevron-forward" size={20} color="#fff"/>
                 </TouchableOpacity>
 
                 {/* Change Username Button */}
                 <TouchableOpacity style={styles.optionButton} onPress={() => router.push('/settingsPages/resetUsername')}>
                     <Text style={styles.optionText}>Change Username</Text>
-                    <Icon style={styles.icon} name="chevron-forward" size={20} color="#fff"/>
+                    <Icon style={{ color: theme.colors.icon}} name="chevron-forward" size={20} color="#fff"/>
                 </TouchableOpacity>
 
                 {/* Reset Password Button */}
                 <TouchableOpacity style={styles.optionButton} onPress={() => router.push("/settingsPages/resetPassword")}>
                     <Text style={styles.optionText}>Reset Password</Text>
-                    <Icon style={styles.icon} name="chevron-forward" size={20} color="#fff"/>
+                    <Icon style={{ color: theme.colors.icon}} name="chevron-forward" size={20} color="#fff"/>
                 </TouchableOpacity>
 
 
                 {/* Delete Account Button */}
                 <TouchableOpacity style={styles.optionButton} onPress={() => router.push("/settingsPages/deleteAccount")}>
                     <Text style={styles.optionText}>Delete Account</Text>
-                    <Icon style={styles.icon} name="chevron-forward" size={20} color="#fff"/>
+                    <Icon style={{ color: theme.colors.icon}} name="chevron-forward" size={20} color="#fff"/>
                 </TouchableOpacity>
 
 
                 {/* Sign Out Button */}
-                <TouchableOpacity style={styles.optionButton} onPress={() => setSignOutDialogVisible(true)}>
+                <TouchableOpacity style={styles.optionButton} onPress={() => {
+                    setSignOutDialogVisible(true)
+                }}>
                     <Text style={styles.optionText}>Sign Out</Text>
-                    <Icon style={styles.icon} name="chevron-forward" size={20} color="#fff" />
+                    <Icon style={{ color: theme.colors.icon}} name="chevron-forward" size={20} color="#fff" />
                 </TouchableOpacity>
 
                 {/* Sign Out Confirmation Dialog */}
@@ -79,7 +82,7 @@ const Settings = () => {
                             <DialogClose asChild>
                                 <TouchableOpacity
                                     style={styles.cancelButton}
-                                    onPress={() => setSignOutDialogVisible(false)} // Close dialog
+                                    onPress={() => setSignOutDialogVisible(false)}
                                 >
                                     <Text style={styles.cancelButtonText}>Cancel</Text>
                                 </TouchableOpacity>
@@ -87,8 +90,8 @@ const Settings = () => {
                             <TouchableOpacity
                                 style={styles.confirmButton}
                                 onPress={() => {
-                                    setSignOutDialogVisible(false); // Close dialog
-                                    onSignOutPress(); // Sign out
+                                    setSignOutDialogVisible(false);
+                                    onSignOutPress();
                                 }}
                             >
                                 <Text style={styles.confirmButtonText}>Yes</Text>

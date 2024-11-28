@@ -62,7 +62,7 @@ const DeleteAccount = () => {
                 <View style={styles.close}>
                     <Text style={styles.viewText}>Delete Account</Text>
                     <TouchableOpacity onPress={() => router.push("/(tabs)/settings")}>
-                        <Icon style={styles.icon} name="close" size={20} color="#fff"/>
+                        <Icon style={{ color: theme.colors.icon}} name="close" size={20} color="#fff"/>
                     </TouchableOpacity>
                 </View>
 
@@ -103,7 +103,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     viewText: {
-        color: '#fff',
         fontSize: 20,
     },
     icon: {
@@ -122,7 +121,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#d9534f',
         padding: 10,
         borderRadius: 5,
-        marginTop: 20,
+        marginTop: 30,
         alignItems: 'center',
     },
     resetButtonText: {

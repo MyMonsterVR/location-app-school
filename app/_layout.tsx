@@ -8,6 +8,7 @@ import {useColorScheme} from "@/lib/useColorScheme";
 import {getItem, setItem} from "@/utils/AsyncStorage";
 import {Theme, ThemeProvider} from "@react-navigation/native";
 import {NAV_THEME} from "@/lib/constants";
+import {PortalHost} from "@rn-primitives/portal";
 
 
 
@@ -128,6 +129,7 @@ export default function RootLayout() {
             <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
                 <InitialLayout />
             </ClerkProvider>
+            <PortalHost />
         </ThemeProvider>
     );
 }
