@@ -1,6 +1,6 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Image} from 'expo-image';
-import {Pressable, StyleSheet, TextInput, View} from 'react-native';
+import {ActivityIndicator, Pressable, StyleSheet, TextInput, View} from 'react-native';
 import {FlashList} from '@shopify/flash-list';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -13,38 +13,15 @@ import {router, useLocalSearchParams} from "expo-router";
 import {debounce} from "@/utils/utils";
 import { useTheme } from '@react-navigation/native';
 import {useFriends} from "@/hooks/useFriends";
+import * as Location from 'expo-location';
+import LocationMessage from "@/components/LocationMessage";
 
 const SERVER_URL = `${process.env.EXPO_PUBLIC_SERVER_URL}`;
 
-interface User
-{
-    username: string;
-    userId: string;
-}
-
-interface Message
-{
-    _id: string;
-    createdAt: string;
-    updatedAt: string;
-    message: {
-        text: string;
-        messageType: 'text' | 'gif';
-        readby: string[];
-    };
-    room: {
-        roomId: string;
-    };
-    user: {
-        userId: string;
-        username: string;
-    }[];
-}
-
 const Chat: React.FC = () =>
 {
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [participants, setParticipants] = useState<User[]>([]);
+    const [messages, setMessages] = useState<definitions.Message[]>([]);
+    const [participants, setParticipants] = useState<definitions.User[]>([]);
     const [message, setMessage] = useState<string>('');
     const [roomId, setRoomId] = useState<string>('');
     const [isGifModalVisible, setIsGifModalVisible] = useState<boolean>(false);
@@ -53,6 +30,9 @@ const Chat: React.FC = () =>
     const [roomType, setRoomType] = useState<string>('single');
     const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
     const [hasScrolled, setHasScrolled] = useState<boolean>(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const [fetchCount, setFetchCount] = useState(0); // New state to track completed fetches
+    const totalFetchCount = 2;
 
     const ITEM_HEIGHT = 70;
 
@@ -66,57 +46,33 @@ const Chat: React.FC = () =>
     const ws = useRef<WebSocket | null>(null);
     const existingMessageIds = useRef<Set<string>>(new Set());
 
-    // region TODO: MOVE TO WHEN APP STARTS
-    const MAX_CACHE_SIZE = 100; // Maximum number of messages to cache
-    const CACHE_EXPIRATION_TIME = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-
-    const clearOldCache = async () =>
-    {
-        try
-        {
-            // Get all the keys in AsyncStorage
-            const keys = await AsyncStorage.getAllKeys();
-
-            // Filter keys that are related to chat messages
-            const messageKeys = keys.filter(key => key.startsWith('messages-'));
-
-            // Define a threshold for cache expiration (e.g., 24 hours)
-            const cacheExpirationTime = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-            const currentTime = new Date().getTime();
-
-            // Iterate over each message cache key and check its timestamp
-            for (const key of messageKeys)
-            {
-                const cachedData = await AsyncStorage.getItem(key);
-                const data = JSON.parse(cachedData);
-
-                if (data && data.timestamp)
-                {
-                    const cacheAge = currentTime - new Date(data.timestamp).getTime();
-
-                    // If cache is older than the expiration time, clear it
-                    if (cacheAge > cacheExpirationTime)
-                    {
-                        console.log(`Cache for ${key} is older than 24 hours, clearing it.`);
-                        await AsyncStorage.removeItem(key);  // Clear the cache
-                    }
-                }
-            }
-        } catch (error)
-        {
-            console.error('Error clearing old cache:', error);
-        }
-    };
-    // endregion
-
     const local = useLocalSearchParams()
 
-    useEffect(() =>
+    // fetch participants username, ids and avatars
+    const fetchParticipants = async () =>
     {
-        const newRoomId = local.roomId
-        setRoomId(newRoomId.toString());
-        connectWebSocket();
-    }, [connectWebSocket, local.roomId]);
+        const response = await fetch(`http://${SERVER_URL}/participants`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${await getToken()}`,
+            },
+            body: JSON.stringify({room: roomId}),
+        });
+
+        const data = await response.json();
+        if (data)
+        {
+            setParticipants(data.users);  // Update participants list
+            setFetchCount(prev => {
+                const newCount = prev + 1;
+                if (newCount === totalFetchCount) {
+                    setIsLoading(false); // Set loading to false only when all fetches are done
+                }
+                return newCount;
+            });
+        }
+    };
 
     const connectWebSocket = useCallback(() =>
     {
@@ -127,7 +83,6 @@ const Chat: React.FC = () =>
 
         ws.current.onopen = () =>
         {
-            console.log('WebSocket connected');
             setMessages([]);  // Clear messages when connecting to a new room
             setIsReconnecting(false);  // Reset reconnecting state
             setHasScrolled(false);  // Reset scroll state
@@ -139,6 +94,12 @@ const Chat: React.FC = () =>
                     displayName: user?.username,
                 })
             );
+
+            const firstMessageTimestamp = new Date(messages[0]?.createdAt).getTime();
+            Promise.all([fetchParticipants(), fetchOlderMessages(roomId, firstMessageTimestamp, 20)]).then(() => {
+                setFetchCount(2); // Update fetch count depending on what you've done
+                setIsLoading(false); // Loading done
+            });
         };
 
         ws.current.onmessage = (e) =>
@@ -209,13 +170,23 @@ const Chat: React.FC = () =>
         ws.current.onerror = (error) =>
         {
             console.error('WebSocket Error:', error);
+            setIsReconnecting(true);  // Mark reconnect attempt
+            reconnectWebSocket();  // Trigger reconnect
         };
 
         ws.current.onclose = () =>
         {
-            console.log('WebSocket closed. Attempting reconnect...');
             setIsReconnecting(true);  // Mark reconnect attempt
             reconnectWebSocket();  // Trigger reconnect
+        };
+
+        return () =>
+        {
+            if (ws.current)
+            {
+                ws.current.close();  // Clean up WebSocket connection
+                ws.current = null;     // Reset reference
+            }
         };
     }, [roomId, userId, user]);
 
@@ -230,20 +201,19 @@ const Chat: React.FC = () =>
             if (ws.current && ws.current.readyState === WebSocket.CLOSED && attempt < maxRetries)
             {
                 attempt++;
-                console.log(`Reconnecting WebSocket, attempt ${attempt}`);
                 connectWebSocket(); // Attempt to reconnect
 
                 if (attempt >= maxRetries)
                 {
                     console.error('Max WebSocket reconnect attempts reached');
                     setIsReconnecting(false); // Stop reconnect attempts after max retries
+                    setIsLoading(false); // Reset loading state
                 } else
                 {
                     setTimeout(attemptReconnect, retryInterval * attempt); // Exponential backoff
                 }
             } else if (!ws.current)
             {
-                console.log('WebSocket was closed or not initialized, attempting to reconnect...');
                 connectWebSocket(); // Make sure to re-initialize the connection if it's completely closed
             }
         };
@@ -314,6 +284,26 @@ const Chat: React.FC = () =>
 
     useEffect(() =>
     {
+        const newRoomId = local.roomId
+        setRoomId(newRoomId.toString());
+        connectWebSocket();
+    }, [connectWebSocket, local.roomId]);
+
+    useEffect(() => {
+        if (roomId) {
+            connectWebSocket();  // Connect to WebSocket with the current room ID
+        }
+
+        return () => {
+            if (ws.current) {
+                ws.current.close();  // Clean up WebSocket connection
+                ws.current = null;     // Reset reference
+            }
+        };
+    }, [roomId]);  // Only recreate on roomId change
+
+    useEffect(() =>
+    {
         if (roomId)
         {
             connectWebSocket();  // Connect to WebSocket with the current room ID
@@ -329,33 +319,6 @@ const Chat: React.FC = () =>
         };
     }, [roomId, connectWebSocket]);
 
-    // fetch participants username, ids and avatars
-    const fetchParticipants = async () =>
-    {
-        const response = await fetch(`http://${SERVER_URL}/participants`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${await getToken()}`,
-            },
-            body: JSON.stringify({room: roomId}),
-        });
-
-        const data = await response.json();
-        if (data)
-        {
-            setParticipants(data.users);  // Update participants list
-        }
-    };
-
-    // Fetch participants when roomId changes
-    useEffect(() =>
-    {
-        if (roomId)
-        {
-            fetchParticipants();
-        }
-    }, [roomId]);
 
     // TODO: Change room db to to not be an array
     // TODO: Fix message loading
@@ -407,8 +370,6 @@ const Chat: React.FC = () =>
     // Scroll to the bottom of the chat when new messages are added
     useEffect(() =>
     {
-        clearOldCache();
-        console.log('reload')
         if (messages.length > 0 && flashListRef.current && !hasScrolled)
         {
             flashListRef.current.scrollToIndex({index: messages.length - 1, animated: false});
@@ -463,6 +424,7 @@ const Chat: React.FC = () =>
             {
                 throw new Error('Failed to fetch older messages');
             }
+
             const data = await response.json();
             return data.messages;
         } catch (error)
@@ -562,11 +524,7 @@ const Chat: React.FC = () =>
         if (!user) return null;
 
         const isOwnMessage = user.userId === userId;
-
-        // Check if the previous message's user is the same as the current
         const isPreviousUserSame = index > 0 && messages[index - 1]?.user?.userId === user.userId;
-
-        // Show username only for the first message in a series from the same sender
         const showUsername = !isPreviousUserSame;
 
         return (
@@ -574,28 +532,31 @@ const Chat: React.FC = () =>
                 style={[
                     styles.messageContainer,
                     isOwnMessage ?
-                        (item.message.messageType === 'text' ? styles.userMessage : styles.userGifMessage) :
-                        (item.message.messageType === 'text' ? styles.otherUserMessage : styles.otherUserGifMessage),
+                        (item.message.messageType === 'text' ? styles.userMessage :
+                            item.message.messageType === 'gif' ? styles.userGifMessage :
+                                styles.userLocationMessage) :
+                        (item.message.messageType === 'text' ? styles.otherUserMessage :
+                            item.message.messageType === 'gif' ? styles.otherUserGifMessage :
+                                styles.otherUserLocationMessage),
                 ]}
             >
-                {/* Display Username */}
                 {showUsername && (
                     <View style={isOwnMessage ? styles.messageHeaderRight : styles.messageHeader}>
-                        <Text style={styles.username(theme, item.message.messageType === 'text')}>
+                        <Text style={styles.username(theme, item.message.messageType !== 'gif')}>
                             {isOwnMessage ? 'Me' : user.username || 'Unknown'}
                         </Text>
                     </View>
                 )}
 
-                {/* Message Content: Text or GIF */}
                 {item.message.messageType === 'text' ? (
                     <Text style={styles.messageText}>{item.message.text}</Text>
                 ) : item.message.messageType === 'gif' ? (
                     <GifMessage gifUrl={item.message.text}/>
+                ) : item.message.messageType === 'location' ? (
+                    <LocationMessage locationData={item.message.text} isOwnMessage={isOwnMessage} />
                 ) : null}
 
-                {/* Additional UI elements (like read status) can stay as is */}
-                {/* Read Status */}
+                {/* Read Status (unchanged) */}
                 {isOwnMessage && index === messages.length - 1 && (
                     <View style={styles.readStatusContainer}>
                         {item.readBy?.slice(0, 2).map((readUserId, idx) => (
@@ -617,64 +578,74 @@ const Chat: React.FC = () =>
 
     return (
         <SafeAreaView style={styles.container(theme)}>
-            <View style={styles.navbar(theme)}>
-                <Pressable onPress={() => router.push('/friends')}>
-                    <Icon name="arrow-back" size={24} color={theme.colors.icon}/>
-                </Pressable>
-                <View style={styles.friendInfoContainer}>
-                    {participants.length === 2 && participants.map((participant) => (
-                        participant.userId !== userId && (
-                            <ProfilePicture key={participant.userId} userId={participant.userId} styling={styles.profileAvatar}/>
-                        )
-                    ))}
-                    {participants.length > 2 && (
-                        <Icon name="people" size={24} color={theme.colors.icon}/>
-                    )}
-                    <Text style={styles.friendUsername(theme)}>{chatTitle}</Text>
+            {isLoading ? (
+                <View style={styles.loadingContainer(theme)}>
+                    <ActivityIndicator size="large" color="#0078d4" style={styles.spinner} />
+                    <Text style={styles.loadingText(theme)}>Loading your chat...</Text>
                 </View>
-                <Pressable onPress={() => console.log("Settings")}>
-                    <Icon name="settings" size={24} color={theme.colors.icon}/>
-                </Pressable>
-            </View>
+            ) : (
+                <>
+                    <View style={styles.navbar(theme)}>
+                        <Pressable onPress={() => router.push('/friends')}>
+                            <Icon name="arrow-back" size={24} color={theme.colors.icon}/>
+                        </Pressable>
+                        <View style={styles.friendInfoContainer}>
+                            {participants.length === 2 && participants.map((participant) => (
+                                participant.userId !== userId && (
+                                    <ProfilePicture key={participant.userId} userId={participant.userId}
+                                                    styling={styles.profileAvatar}/>
+                                )
+                            ))}
+                            {participants.length > 2 && (
+                                <Icon name="people" size={24} color={theme.colors.icon}/>
+                            )}
+                            <Text style={styles.friendUsername(theme)}>{chatTitle}</Text>
+                        </View>
+                        <Pressable onPress={() => console.log("Settings")}>
+                            <Icon name="settings" size={24} color={theme.colors.icon}/>
+                        </Pressable>
+                    </View>
+                    <View style={styles.chatArea}>
+                        <FlashList
+                            ref={flashListRef}
+                            data={messages}
+                            keyExtractor={(item) => item._id ? item._id.toString() : `item-${Math.random()}`} // Make sure to use a unique key like message ID
+                            renderItem={renderItem}
+                            contentContainerStyle={styles.messagesContainer}
+                            onScrollBeginDrag={onScrollBeginDrag}
+                            onScrollEndDrag={onScrollEndDrag}
+                            estimatedItemSize={ITEM_HEIGHT}
+                            onViewableItemsChanged={onViewableItemsChanged.current}
+                            viewabilityConfig={viewabilityConfig}
+                            onEndReachedThreshold={0.1}
+                            onRefresh={loadOlderMessages}
+                            refreshing={isReconnecting}/>
+                    </View>
 
-            <View style={styles.chatArea}>
-                <FlashList
-                    ref={flashListRef}
-                    data={messages}
-                    keyExtractor={(item) => item._id ? item._id.toString() : `item-${Math.random()}`}  // Make sure to use a unique key like message ID
-                    renderItem={renderItem}
-                    contentContainerStyle={styles.messagesContainer}
-                    onScrollBeginDrag={onScrollBeginDrag}
-                    onScrollEndDrag={onScrollEndDrag}
-                    estimatedItemSize={ITEM_HEIGHT}
-                    onViewableItemsChanged={onViewableItemsChanged.current}
-                    viewabilityConfig={viewabilityConfig}
-                    onEndReachedThreshold={0.1}
-                    onRefresh={loadOlderMessages}
-                    refreshing={isReconnecting}
-                />
-            </View>
+                {/* Message Input Area */}
+                <View style={styles.inputContainer(theme)}>
+                    <Pressable onPress={() => setIsGifModalVisible(true)} style={styles.gifButton}>
+                        <Icon name="image" size={24} color={theme.colors.icon}/>
+                    </Pressable>
+                    <TextInput
+                        value={message}
+                        onChangeText={setMessage}
+                        placeholder="Type a message..."
+                        onSubmitEditing={() => sendMessage(message, 'text')}
+                        style={styles.input}
+                    />
+                    <Pressable onPress={() => sendMessage(message, 'text')} style={styles.sendButton}>
+                        <Icon name="send" size={24} color="#0078d4"/>
+                    </Pressable>
+                </View>
 
-            {/* Message Input Area */}
-            <View style={styles.inputContainer(theme)}>
-                <Pressable onPress={() => setIsGifModalVisible(true)} style={styles.gifButton}>
-                    <Icon name="image" size={24} color={theme.colors.icon}/>
-                </Pressable>
-                <TextInput
-                    value={message}
-                    onChangeText={setMessage}
-                    placeholder="Type a message..."
-                    onSubmitEditing={() => sendMessage(message, 'text')}
-                    style={styles.input}
-                />
-                <Pressable onPress={() => sendMessage(message, 'text')} style={styles.sendButton}>
-                    <Icon name="send" size={24} color="#0078d4"/>
-                </Pressable>
-            </View>
-
-            {/* GIF Modal */}
-            <GifModal isVisible={isGifModalVisible} onClose={() => setIsGifModalVisible(false)}
-                      onSelectGif={sendMessage}/>
+                {/* GIF Modal */}
+                <GifModal
+                    isVisible={isGifModalVisible}
+                    onClose={() => setIsGifModalVisible(false)}
+                    onSelectGif={sendMessage}/>
+                </>
+            )}
         </SafeAreaView>
     );
 };
@@ -696,6 +667,21 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#444',
         borderRadius: 10,
+    }),
+    loadingContainer: (theme) => ({
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: theme.colors.background,
+    }),
+    spinner: {
+        marginBottom: 20,
+    },
+    loadingText: (theme) => ({
+        fontSize: 18,
+        color: '#555',
+        fontWeight: 'bold',
+        color: theme.colors.text,
     }),
     friendInfoContainer: {
         flexDirection: 'row',
@@ -739,6 +725,10 @@ const styles = StyleSheet.create({
         alignSelf: 'flex-end',
     },
     userGifMessage: {
+        padding: 0,
+        alignSelf: 'flex-end',
+    },
+    userLocationMessage: {
         padding: 0,
         alignSelf: 'flex-end',
     },

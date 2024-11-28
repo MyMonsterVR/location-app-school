@@ -9,6 +9,8 @@ import {getItem, setItem} from "@/utils/AsyncStorage";
 import {Theme, ThemeProvider} from "@react-navigation/native";
 import {NAV_THEME} from "@/lib/constants";
 import {PortalHost} from "@rn-primitives/portal";
+import {MapProvider} from "@/context/MapContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 
 
@@ -106,6 +108,49 @@ export default function RootLayout() {
         };
 
         loadTheme();
+
+        const MAX_CACHE_SIZE = 100; // Maximum number of messages to cache
+        const CACHE_EXPIRATION_TIME = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+        const clearOldCache = async () =>
+        {
+            try
+            {
+                // Get all the keys in AsyncStorage
+                const keys = await AsyncStorage.getAllKeys();
+
+                // Filter keys that are related to chat messages
+                const messageKeys = keys.filter(key => key.startsWith('messages-'));
+
+                // Define a threshold for cache expiration (e.g., 24 hours)
+                const cacheExpirationTime = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+                const currentTime = new Date().getTime();
+
+                // Iterate over each message cache key and check its timestamp
+                for (const key of messageKeys)
+                {
+                    const cachedData = await AsyncStorage.getItem(key);
+                    const data = JSON.parse(cachedData);
+
+                    if (data && data.timestamp)
+                    {
+                        const cacheAge = currentTime - new Date(data.timestamp).getTime();
+
+                        // If cache is older than the expiration time, clear it
+                        if (cacheAge > cacheExpirationTime)
+                        {
+                            console.log(`Cache for ${key} is older than 24 hours, clearing it.`);
+                            await AsyncStorage.removeItem(key);  // Clear the cache
+                        }
+                    }
+                }
+            } catch (error)
+            {
+                console.error('Error clearing old cache:', error);
+            }
+        };
+
+        clearOldCache();
     }, []);
 
     useEffect(() => {
@@ -126,10 +171,12 @@ export default function RootLayout() {
 
     return (
         <ThemeProvider value={isDarkColorScheme ? DARK_THEME : LIGHT_THEME}>
-            <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-                <InitialLayout />
-            </ClerkProvider>
-            <PortalHost />
+            <MapProvider>
+                <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+                    <InitialLayout />
+                </ClerkProvider>
+                <PortalHost />
+            </MapProvider>
         </ThemeProvider>
     );
 }

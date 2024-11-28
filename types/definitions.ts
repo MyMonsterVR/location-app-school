@@ -21,4 +21,29 @@ namespace definitions {
         place_id: string;
         description: string;
     }
+
+    export interface User
+    {
+        username: string;
+        userId: string;
+    }
+
+    export interface Message
+    {
+        _id: string;
+        createdAt: string;
+        updatedAt: string;
+        message: {
+            text: string;
+            messageType: 'text' | 'gif' | 'image' | 'location';
+            readby: string[];
+        };
+        room: {
+            roomId: string;
+        };
+        user: {
+            userId: string;
+            username: string;
+        }[];
+    }
 }

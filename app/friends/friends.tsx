@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { ScrollView, Pressable, StyleSheet, View, RefreshControl } from 'react-native';
+import {ScrollView, Pressable, StyleSheet, View, RefreshControl, ActivityIndicator} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/text';
 import ProfilePicture from '@/components/ProfilePicture';
@@ -61,7 +61,10 @@ const Friends: React.FC = () => {
                 </View>
 
                 {isLoading ? (
-                    <Text style={{ color: theme.colors.text }}>Loading friends...</Text>
+                    <View style={styles.loadingContainer(theme)}>
+                        <ActivityIndicator size="large" color="#0078d4" style={styles.spinner} />
+                        <Text style={styles.loadingText(theme)}>Loading your friends...</Text>
+                    </View>
                 ) : (
                     friends.map((friend) => (
                         <Pressable
@@ -131,6 +134,21 @@ const styles = StyleSheet.create({
         fontSize: 16,
         paddingHorizontal: 20,
     },
+    loadingContainer: (theme) => ({
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: theme.colors.background,
+    }),
+    spinner: {
+        marginBottom: 20,
+    },
+    loadingText: (theme) => ({
+        fontSize: 18,
+        color: '#555',
+        fontWeight: 'bold',
+        color: theme.colors.text,
+    }),
 });
 
 export default Friends;

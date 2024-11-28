@@ -26,26 +26,36 @@ import BottomSheet, {BottomSheetView} from "@gorhom/bottom-sheet";
 import ProfilePicture from "@/components/ProfilePicture";
 import {useTheme} from "@react-navigation/native";
 import {router} from "expo-router";
+import {useMapContext} from "@/context/MapContext";
+import ShareDestination from "@/components/ShareDestination";
 
 const GOOGLE_MAPS_APIKEY = process.env.EXPO_PUBLIC_GOOGLE_API;
+const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL;
 
 export default function Map()
 {
-    const [origin, setOrigin] = useState<definitions.Location | null>(null);
-    const [destination, setDestination] = useState<definitions.Location | null>(null);
+    const {
+        origin,
+        setOrigin,
+        destination,
+        setDestination,
+        recentRoutes,
+        setRecentRoutes,
+        mapDarkMode,
+        mapTrackMode,
+        darkModeEnabled,
+        trackModeEnabled
+    } = useMapContext();
     const [searchText, setSearchText] = useState<string | null>(null);
     const [searchResults, setSearchResults] = useState<definitions.SearchResult[]>([]);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [mapTheme, setMapTheme] = useState<Record<string, unknown>[]>([]);
-    const [recentRoutes, setRecentRoutes] = useState<string[]>([]);
     const [friendDetails, setFriendDetails] = useState<definitions.Friend[]>([]);
     const [selectedFriend, setSelectedFriend] = useState<definitions.Friend | null>(null);
     const [abortController, setAbortController] = useState<AbortController | null>(null);
 
     const [isSearchModalVisible, setSearchModalVisible] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const [darkModeEnabled, setDarkModeEnabled] = useState(false);
-    const [trackModeEnabled, setTrackModeEnabled] = useState(false);
     const [isThrottled, setIsThrottled] = useState(false);
     const [speed, setSpeed] = useState(0);
     const [isUserInteracting, setIsUserInteracting] = useState(false);
@@ -64,17 +74,6 @@ export default function Map()
     const {friends} = useFriends(userId as string, getToken);
 
     const theme = useTheme();
-    const mapDarkMode = darkModeMapStyling
-    const mapTrackMode = trackModeMapStyling
-
-    const loadRecentRoutes = async () =>
-    {
-        const routes = await getItem('@recent_routes');
-        if (routes)
-        {
-            setRecentRoutes(JSON.parse(routes));
-        }
-    };
 
     // Save recent route with destination address only
     const saveRecentRoute = async (coords: definitions.Location, destinationAddress: string) =>
@@ -94,8 +93,10 @@ export default function Map()
         }
     };
 
-    const debouncedSearchPlaces = debounce(async (input: string | null) => {
-        if (!input || !input.trim().length) {
+    const debouncedSearchPlaces = debounce(async (input: string | null) =>
+    {
+        if (!input || !input.trim().length)
+        {
             setSearchResults([]);
             return;
         }
@@ -103,7 +104,8 @@ export default function Map()
         setIsLoading(true);
 
         // Cancel the previous fetch if it's still pending
-        if (abortController) {
+        if (abortController)
+        {
             abortController.abort(); // abort previous request
         }
 
@@ -113,22 +115,29 @@ export default function Map()
         const googleApisUrl = "https://maps.googleapis.com/maps/api/place/autocomplete/json";
         const url = `${googleApisUrl}?input=${input}&location=${origin?.latitude},${origin?.longitude}&key=${GOOGLE_MAPS_APIKEY}`;
 
-        try {
-            const resp = await fetch(url, { signal: newAbortController.signal }); // attach abort signal
+        try
+        {
+            const resp = await fetch(url, {signal: newAbortController.signal}); // attach abort signal
             const json = await resp.json();
 
-            if (resp.ok && json.status === "OK" && json.predictions) {
+            if (resp.ok && json.status === "OK" && json.predictions)
+            {
                 setSearchResults(json.predictions);
-            } else {
+            } else
+            {
                 setSearchResults([]); // Reset if no valid predictions
             }
-        } catch (error) {
-            if (error.name === 'AbortError') {
+        } catch (error)
+        {
+            if (error.name === 'AbortError')
+            {
                 console.log('Fetch request was aborted');
-            } else {
+            } else
+            {
                 console.log(error);
             }
-        } finally {
+        } finally
+        {
             setIsLoading(false);
         }
     }, 300);
@@ -188,15 +197,6 @@ export default function Map()
         return R * c * 1000; // Distance in meters
     };
 
-    const handleMapstyle = async () =>
-    {
-        const darkMode = await getItem('toggleDarkMode');
-        const trackMode = await getItem('toggleTrackMode');
-
-        if (darkModeEnabled !== darkMode) setDarkModeEnabled(darkMode);
-        if (trackModeEnabled !== trackMode) setTrackModeEnabled(trackMode);
-    }
-
     const updateLocationDBThrottle = async (location: definitions.Location): Promise<void> =>
     {
         if (isThrottled) return; // Prevent further calls if throttled
@@ -210,16 +210,6 @@ export default function Map()
             setIsThrottled(false);
         }, throttleDuration);
     };
-
-    useEffect(() =>
-    {
-        if (origin)
-        {
-            updateLocationDBThrottle(origin);
-        }
-    }, [origin]);
-
-    const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL;
 
     const updateLocationDB = async (location: definitions.Location): Promise<void> =>
     {
@@ -258,6 +248,34 @@ export default function Map()
             console.error('Error updating location:', error);
         }
     };
+
+    const fetchFriendLocations = async () =>
+    {
+        const locations = await fetch(`http://${SERVER_URL}/friends/getInfo`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getToken()}`,
+            },
+            body: JSON.stringify({userIds: friends.map(friend => friend.userId)}),
+        });
+
+        if (!locations.ok)
+        {
+            throw new Error('Failed to fetch locations');
+        }
+
+        const data = await locations.json();
+        setFriendDetails(data.locations || []);
+    }
+
+    useEffect(() =>
+    {
+        if (origin)
+        {
+            updateLocationDBThrottle(origin);
+        }
+    }, [origin]);
 
     useEffect(() =>
     {
@@ -365,13 +383,6 @@ export default function Map()
 
     useEffect(() =>
     {
-        const interval = setInterval(handleMapstyle, 1000)
-
-        return () => clearInterval(interval)
-    }, [darkModeEnabled, trackModeEnabled]);
-
-    useEffect(() =>
-    {
         setMapTheme(
             trackModeEnabled
                 ? mapTrackMode
@@ -381,29 +392,8 @@ export default function Map()
         )
     }, [darkModeEnabled, trackModeEnabled]);
 
-    const fetchFriendLocations = async () =>
-    {
-        const locations = await fetch(`http://${SERVER_URL}/friends/getInfo`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${getToken()}`,
-            },
-            body: JSON.stringify({userIds: friends.map(friend => friend.userId)}),
-        });
-
-        if (!locations.ok)
-        {
-            throw new Error('Failed to fetch locations');
-        }
-
-        const data = await locations.json();
-        setFriendDetails(data.locations || []);
-    }
-
     useEffect(() =>
     {
-        loadRecentRoutes();
         fetchFriendLocations();
         goToMyLocation();
     }, []);
@@ -487,6 +477,7 @@ export default function Map()
             <TouchableOpacity style={styles.searchIconButton} onPress={() => setSearchModalVisible(true)}>
                 <Icon name="search" size={30} color="#FFF"/>
             </TouchableOpacity>
+            {destination && <ShareDestination selectedDestination={destination}/>}
             <Modal
                 visible={isSearchModalVisible}
                 animationType="slide"
