@@ -12,6 +12,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {router, useLocalSearchParams} from "expo-router";
 import {debounce} from "@/utils/utils";
 import { useTheme } from '@react-navigation/native';
+import {useFriends} from "@/hooks/useFriends";
 
 const SERVER_URL = `${process.env.EXPO_PUBLIC_SERVER_URL}`;
 
@@ -59,6 +60,7 @@ const Chat: React.FC = () =>
     const {user} = useUser();
 
     const theme = useTheme();
+    const { friends } = useFriends(userId as string, getToken)
 
     const flashListRef = useRef<FlashList<any>>(null);
     const ws = useRef<WebSocket | null>(null);
@@ -617,14 +619,21 @@ const Chat: React.FC = () =>
         <SafeAreaView style={styles.container(theme)}>
             <View style={styles.navbar(theme)}>
                 <Pressable onPress={() => router.push('/friends')}>
-                    <Icon name="arrow-back" size={24} color={theme.colors.icons}/>
+                    <Icon name="arrow-back" size={24} color={theme.colors.icon}/>
                 </Pressable>
                 <View style={styles.friendInfoContainer}>
-                    <ProfilePicture userId={userId} styling={styles.profileAvatar}/>
+                    {participants.length === 2 && participants.map((participant) => (
+                        participant.userId !== userId && (
+                            <ProfilePicture key={participant.userId} userId={participant.userId} styling={styles.profileAvatar}/>
+                        )
+                    ))}
+                    {participants.length > 2 && (
+                        <Icon name="people" size={24} color={theme.colors.icon}/>
+                    )}
                     <Text style={styles.friendUsername(theme)}>{chatTitle}</Text>
                 </View>
                 <Pressable onPress={() => console.log("Settings")}>
-                    <Icon name="settings" size={24} color={theme.colors.icons}/>
+                    <Icon name="settings" size={24} color={theme.colors.icon}/>
                 </Pressable>
             </View>
 
@@ -649,7 +658,7 @@ const Chat: React.FC = () =>
             {/* Message Input Area */}
             <View style={styles.inputContainer(theme)}>
                 <Pressable onPress={() => setIsGifModalVisible(true)} style={styles.gifButton}>
-                    <Icon name="image" size={24} color={theme.colors.icons}/>
+                    <Icon name="image" size={24} color={theme.colors.icon}/>
                 </Pressable>
                 <TextInput
                     value={message}
