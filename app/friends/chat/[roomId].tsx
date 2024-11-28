@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Image} from 'expo-image';
 import {ActivityIndicator, Pressable, StyleSheet, TextInput, View} from 'react-native';
 import {FlashList} from '@shopify/flash-list';
@@ -519,13 +519,11 @@ const Chat: React.FC = () =>
         viewAreaCoveragePercentThreshold: 50,
     };
 
-    const renderItem = useCallback(({item, index}) => {
+    const renderItem = useCallback(({ item }) => {
         const user = item.user;
         if (!user) return null;
 
         const isOwnMessage = user.userId === userId;
-        const isPreviousUserSame = index > 0 && messages[index - 1]?.user?.userId === user.userId;
-        const showUsername = !isPreviousUserSame;
 
         return (
             <View
@@ -540,7 +538,7 @@ const Chat: React.FC = () =>
                                 styles.otherUserLocationMessage),
                 ]}
             >
-                {showUsername && (
+                {item.showUsername && (
                     <View style={isOwnMessage ? styles.messageHeaderRight : styles.messageHeader}>
                         <Text style={styles.username(theme, item.message.messageType !== 'gif')}>
                             {isOwnMessage ? 'Me' : user.username || 'Unknown'}
@@ -551,30 +549,39 @@ const Chat: React.FC = () =>
                 {item.message.messageType === 'text' ? (
                     <Text style={styles.messageText}>{item.message.text}</Text>
                 ) : item.message.messageType === 'gif' ? (
-                    <GifMessage gifUrl={item.message.text}/>
+                    <GifMessage gifUrl={item.message.text} />
                 ) : item.message.messageType === 'location' ? (
                     <LocationMessage locationData={item.message.text} isOwnMessage={isOwnMessage} />
                 ) : null}
 
-                {/* Read Status (unchanged) */}
-                {isOwnMessage && index === messages.length - 1 && (
+                {isOwnMessage && item.isLastMessage && (
                     <View style={styles.readStatusContainer}>
                         {item.readBy?.slice(0, 2).map((readUserId, idx) => (
                             <View
                                 key={readUserId}
                                 style={[
                                     styles.readStatusProfilePicture,
-                                    {left: idx * 15},
+                                    { left: idx * 15 },
                                 ]}
                             >
-                                <ProfilePicture userId={readUserId} styling={styles.readStatusProfilePicture}/>
+                                <ProfilePicture userId={readUserId} styling={styles.readStatusProfilePicture} />
                             </View>
                         ))}
                     </View>
                 )}
             </View>
         );
-    }, [userId]);
+    }, [userId, theme]);
+
+    const processMessages = useCallback((msgs) => {
+        return msgs.map((message, index) => ({
+            ...message,
+            showUsername: index === 0 || msgs[index - 1].user.userId !== message.user.userId,
+            isLastMessage: index === msgs.length - 1
+        }));
+    }, []);
+
+    const memoizedMessages = useMemo(() => processMessages(messages), [messages, processMessages]);
 
     return (
         <SafeAreaView style={styles.container(theme)}>
@@ -608,7 +615,7 @@ const Chat: React.FC = () =>
                     <View style={styles.chatArea}>
                         <FlashList
                             ref={flashListRef}
-                            data={messages}
+                            data={memoizedMessages}
                             keyExtractor={(item) => item._id ? item._id.toString() : `item-${Math.random()}`} // Make sure to use a unique key like message ID
                             renderItem={renderItem}
                             contentContainerStyle={styles.messagesContainer}
