@@ -12,6 +12,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { useFriends } from "@/hooks/useFriends";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { useTheme } from "@react-navigation/native";
+import ProfilePicture from "@/components/ProfilePicture";
 
 const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL;
 
@@ -112,7 +113,16 @@ const ShareDestination = ({ selectedDestination }) => {
                                         style={[styles.friendItem, isSelected && styles.selectedFriendItem]}
                                         onPress={() => selectFriend(item.userId)}
                                     >
-                                        <Text style={styles.friendUsername}>{item.username}</Text>
+                                        <View style={{
+                                            flex: 1,
+                                            flexDirection: 'row',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            gap: 16,
+                                        }}>
+                                            <ProfilePicture userId={item.userId} styling={{ flex: 1, width: 40, height: 40, borderRadius: 20 }} />
+                                            <Text style={styles.friendUsername}>{item.username}</Text>
+                                        </View>
                                         {isSelected && <Icon name="checkmark-circle" size={24} color={theme.colors.primary} />}
                                     </TouchableOpacity>
                                 );
@@ -182,6 +192,7 @@ const getStyles = (theme, colorScheme) => StyleSheet.create({
         backgroundColor: theme.colors.background + '10',
     },
     friendUsername: {
+        flex: 1,
         fontSize: 16,
         color: theme.colors.text,
     },
