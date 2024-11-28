@@ -41,6 +41,8 @@ export default function Map()
     const [trackModeEnabled, setTrackModeEnabled] = useState(false);
     const [isThrottled, setIsThrottled] = useState(false);
     const [speed, setSpeed] = useState(0);
+    const [isUserInteracting, setIsUserInteracting] = useState(false);
+    const [shouldAnimate, setShouldAnimate] = useState(true);
 
     const mapRef = useRef<MapView | null>(null);
     const lastPosition = useRef(null);
@@ -48,11 +50,10 @@ export default function Map()
 
     const stationaryThreshold = 10;
     const stationaryTimeout = 2000;
-    const throttleDuration = 5000; // 5 seconds
+    const throttleDuration = 2000; // 2 seconds
 
     const {userId, getToken} = useAuth();
     const { friends } = useFriends(userId as string, getToken);
-
 
     const mapDarkMode = darkModeMapStyling
     const mapTrackMode = trackModeMapStyling
@@ -134,6 +135,16 @@ export default function Map()
                 setDestination(coords);
                 setSearchResults([]);
                 setSearchModalVisible(false);
+                setIsUserInteracting(false);
+
+                let currentLocation = await Location.getCurrentPositionAsync({});
+
+                mapRef.current?.animateToRegion({
+                    latitude: currentLocation.coords.latitude,
+                    longitude: currentLocation.coords.longitude,
+                    latitudeDelta: 0.005,
+                    longitudeDelta: 0.005,
+                })
 
                 await saveRecentRoute(coords, address);
             }
@@ -196,9 +207,7 @@ export default function Map()
 
             const locationSubscription = await Location.watchPositionAsync(
                 {
-                    accuracy: Location.Accuracy.Balanced,
-                    distanceInterval: 1, // Trigger location update every 1 meter
-                    timeInterval: 1000, // Trigger location update every second
+                    accuracy: Location.Accuracy.BestForNavigation,
                 },
                 (location) =>
                 {
@@ -252,13 +261,11 @@ export default function Map()
                         }
                     }
 
-                    const region = {
-                        latitude,
-                        longitude,
-                        latitudeDelta: 0.005,
-                        longitudeDelta: 0.005,
-                    };
-                    mapRef.current?.animateToRegion(region, 100);
+                    if (!isUserInteracting) {
+                        const {latitude, longitude} = location.coords;
+                        // Simply update origin without forcing the map to the new location
+                        setOrigin({latitude, longitude});
+                    }
                 }
             );
 
@@ -271,7 +278,7 @@ export default function Map()
                 }
             };
         })();
-    }, [destination]);
+    }, [isUserInteracting]);
 
     const updateLocationDBThrottle = async (latitude, longitude) =>
     {
@@ -397,6 +404,9 @@ export default function Map()
                 provider={PROVIDER_GOOGLE}
                 customMapStyle={mapTheme}
                 showsTraffic={true}
+                onRegionChange={() => {
+                    setIsUserInteracting(true);
+                }}
             >
                 {origin && (
                     <MapViewDirections
@@ -406,6 +416,7 @@ export default function Map()
                         mode="DRIVING" // Default transport mode
                         strokeWidth={8}
                         strokeColor="#34a4eb"
+                        splitWaypoints={true}
                     />
                 )}
                 {destination && (
