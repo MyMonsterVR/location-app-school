@@ -19,21 +19,28 @@ import Speedometer from "@/components/Speedometer";
 import {debounce} from "@/utils/utils";
 import {darkModeMapStyling, trackModeMapStyling} from "@/lib/mapStyles";
 import {useAuth} from "@clerk/clerk-expo";
-import { useFriends } from "@/hooks/useFriends";
+import {useFriends} from "@/hooks/useFriends";
 import FriendMarker from "@/components/FriendMarker";
+import {GestureHandlerRootView} from "react-native-gesture-handler";
+import BottomSheet, {BottomSheetView} from "@gorhom/bottom-sheet";
+import ProfilePicture from "@/components/ProfilePicture";
+import {useTheme} from "@react-navigation/native";
+import {router} from "expo-router";
 
 const GOOGLE_MAPS_APIKEY = process.env.EXPO_PUBLIC_GOOGLE_API;
 
 export default function Map()
 {
-    const [origin, setOrigin] = useState<OriginLocation | null>(null);
-    const [destination, setDestination] = useState<DestinationLocation | null>(null);
+    const [origin, setOrigin] = useState<definitions.Location | null>(null);
+    const [destination, setDestination] = useState<definitions.Location | null>(null);
     const [searchText, setSearchText] = useState<string | null>(null);
-    const [searchResults, setSearchResults] = useState<any[]>([]);
+    const [searchResults, setSearchResults] = useState<definitions.SearchResult[]>([]);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [mapTheme, setMapTheme] = useState<Record<string, unknown>[]>([]);
     const [recentRoutes, setRecentRoutes] = useState<string[]>([]);
-    const [friendLocations, setFriendLocations] = useState<any[]>([]);
+    const [friendDetails, setFriendDetails] = useState<definitions.Friend[]>([]);
+    const [selectedFriend, setSelectedFriend] = useState<definitions.Friend | null>(null);
+    const [abortController, setAbortController] = useState<AbortController | null>(null);
 
     const [isSearchModalVisible, setSearchModalVisible] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -45,16 +52,18 @@ export default function Map()
     const [shouldAnimate, setShouldAnimate] = useState(true);
 
     const mapRef = useRef<MapView | null>(null);
-    const lastPosition = useRef(null);
-    const stationaryTimer = useRef(null);
+    const lastPosition = useRef<definitions.Location | null>(null);
+    const stationaryTimer = useRef<NodeJS.Timeout | null>(null);
+    const bottomSheetRef = useRef<BottomSheet>(null);
 
     const stationaryThreshold = 10;
     const stationaryTimeout = 2000;
     const throttleDuration = 2000; // 2 seconds
 
     const {userId, getToken} = useAuth();
-    const { friends } = useFriends(userId as string, getToken);
+    const {friends} = useFriends(userId as string, getToken);
 
+    const theme = useTheme();
     const mapDarkMode = darkModeMapStyling
     const mapTrackMode = trackModeMapStyling
 
@@ -68,7 +77,7 @@ export default function Map()
     };
 
     // Save recent route with destination address only
-    const saveRecentRoute = async (coords: DestinationLocation, destinationAddress: string) =>
+    const saveRecentRoute = async (coords: definitions.Location, destinationAddress: string) =>
     {
         const routes = await getItem('@recent_routes');
         const savedRoutes = routes ? JSON.parse(routes) : [];
@@ -85,34 +94,41 @@ export default function Map()
         }
     };
 
-    const debouncedSearchPlaces = debounce(async (input) =>
-    {
-        if (!input || !input.trim().length)
-        {
+    const debouncedSearchPlaces = debounce(async (input: string | null) => {
+        if (!input || !input.trim().length) {
             setSearchResults([]);
             return;
         }
 
         setIsLoading(true);
+
+        // Cancel the previous fetch if it's still pending
+        if (abortController) {
+            abortController.abort(); // abort previous request
+        }
+
+        const newAbortController = new AbortController(); // create new controller
+        setAbortController(newAbortController); // update state
+
         const googleApisUrl = "https://maps.googleapis.com/maps/api/place/autocomplete/json";
         const url = `${googleApisUrl}?input=${input}&location=${origin?.latitude},${origin?.longitude}&key=${GOOGLE_MAPS_APIKEY}`;
 
-        try
-        {
-            const resp = await fetch(url);
+        try {
+            const resp = await fetch(url, { signal: newAbortController.signal }); // attach abort signal
             const json = await resp.json();
-            if (json.status === "OK" && json.predictions)
-            {
+
+            if (resp.ok && json.status === "OK" && json.predictions) {
                 setSearchResults(json.predictions);
-            } else
-            {
+            } else {
                 setSearchResults([]); // Reset if no valid predictions
             }
-        } catch (error)
-        {
-            console.log(error);
-        } finally
-        {
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                console.log('Fetch request was aborted');
+            } else {
+                console.log(error);
+            }
+        } finally {
             setIsLoading(false);
         }
     }, 300);
@@ -132,19 +148,11 @@ export default function Map()
 
                 const coords = {latitude: location.lat, longitude: location.lng}
 
+                goToMyLocation()
                 setDestination(coords);
                 setSearchResults([]);
                 setSearchModalVisible(false);
                 setIsUserInteracting(false);
-
-                let currentLocation = await Location.getCurrentPositionAsync({});
-
-                mapRef.current?.animateToRegion({
-                    latitude: currentLocation.coords.latitude,
-                    longitude: currentLocation.coords.longitude,
-                    latitudeDelta: 0.005,
-                    longitudeDelta: 0.005,
-                })
 
                 await saveRecentRoute(coords, address);
             }
@@ -154,7 +162,19 @@ export default function Map()
         }
     };
 
-    const getDistance = (latLng1, latLng2) =>
+    const goToMyLocation = async () =>
+    {
+        let currentLocation = await Location.getCurrentPositionAsync({});
+
+        mapRef.current?.animateToRegion({
+            latitude: currentLocation.coords.latitude,
+            longitude: currentLocation.coords.longitude,
+            latitudeDelta: 0.005,
+            longitudeDelta: 0.005,
+        })
+    }
+
+    const getDistance = (latLng1: definitions.Location, latLng2: definitions.Location): number =>
     {
         const rad = (x) => (x * Math.PI) / 180;
         const R = 6371; // Radius of the Earth in kilometers
@@ -176,6 +196,68 @@ export default function Map()
         if (darkModeEnabled !== darkMode) setDarkModeEnabled(darkMode);
         if (trackModeEnabled !== trackMode) setTrackModeEnabled(trackMode);
     }
+
+    const updateLocationDBThrottle = async (location: definitions.Location): Promise<void> =>
+    {
+        if (isThrottled) return; // Prevent further calls if throttled
+
+        setIsThrottled(true); // Set throttling on
+        await updateLocationDB(location);
+
+        // Set a timer to reset the throttle after a duration
+        setTimeout(() =>
+        {
+            setIsThrottled(false);
+        }, throttleDuration);
+    };
+
+    useEffect(() =>
+    {
+        if (origin)
+        {
+            updateLocationDBThrottle(origin);
+        }
+    }, [origin]);
+
+    const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL;
+
+    const updateLocationDB = async (location: definitions.Location): Promise<void> =>
+    {
+        // Destructure latitude and longitude from the location parameter
+        const {latitude, longitude} = location;
+
+        if (!userId) return;
+
+        // Optional: Basic validation
+        if (latitude === undefined || longitude === undefined) return;
+
+        try
+        {
+            const token = await getToken();
+            const response = await fetch(
+                `http://${SERVER_URL}/user/location`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({userId, latitude, longitude}),
+                }
+            );
+
+            if (!response.ok)
+            {
+                throw new Error('Failed to update location');
+            }
+
+            // fetch locations
+            await fetchFriendLocations();
+        } catch (error)
+        {
+            console.error('Error updating location:', error);
+        }
+    };
 
     useEffect(() =>
     {
@@ -261,7 +343,8 @@ export default function Map()
                         }
                     }
 
-                    if (!isUserInteracting) {
+                    if (!isUserInteracting)
+                    {
                         const {latitude, longitude} = location.coords;
                         // Simply update origin without forcing the map to the new location
                         setOrigin({latitude, longitude});
@@ -279,64 +362,6 @@ export default function Map()
             };
         })();
     }, [isUserInteracting]);
-
-    const updateLocationDBThrottle = async (latitude, longitude) =>
-    {
-        if (isThrottled) return; // Prevent further calls if throttled
-
-        setIsThrottled(true); // Set throttling on
-        await updateLocationDB(latitude, longitude);
-
-        // Set a timer to reset the throttle after a duration
-        setTimeout(() =>
-        {
-            setIsThrottled(false);
-        }, throttleDuration);
-    };
-
-    useEffect(() =>
-    {
-        if (origin)
-        {
-            updateLocationDBThrottle(origin.latitude, origin.longitude);
-        }
-    }, [origin]);
-
-    const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL;
-
-    const updateLocationDB = async (latitude: number, longitude: number) =>
-    {
-        if (!userId) return;
-
-        if (!latitude || !longitude) return;
-
-        try
-        {
-            const token = await getToken();
-            const response = await fetch(
-                `http://${SERVER_URL}/user/location`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({userId, latitude, longitude}),
-                }
-            );
-
-            if (!response.ok)
-            {
-                throw new Error('Failed to update location');
-            }
-
-            // fetch locations
-            await fetchFriendLocations()
-        } catch (error)
-        {
-            console.error('Error updating location:', error);
-        }
-    }
 
     useEffect(() =>
     {
@@ -358,13 +383,13 @@ export default function Map()
 
     const fetchFriendLocations = async () =>
     {
-        const locations = await fetch(`http://${SERVER_URL}/friends/locations`, {
+        const locations = await fetch(`http://${SERVER_URL}/friends/getInfo`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${getToken()}`,
             },
-            body: JSON.stringify({ userIds: friends.map(friend => friend.userId) }),
+            body: JSON.stringify({userIds: friends.map(friend => friend.userId)}),
         });
 
         if (!locations.ok)
@@ -373,14 +398,33 @@ export default function Map()
         }
 
         const data = await locations.json();
-        setFriendLocations(data.locations || []);
+        setFriendDetails(data.locations || []);
     }
 
     useEffect(() =>
     {
         loadRecentRoutes();
         fetchFriendLocations();
+        goToMyLocation();
     }, []);
+
+    const handleFriendPress = (friend) =>
+    {
+        // merge friends.find(f => f.userId === selectedFriend.userId) and friend
+        const mergedFriend = {
+            ...friends.find(f => f.userId === friend.userId),
+            ...friend,
+        }
+
+        setSelectedFriend(mergedFriend);
+
+        bottomSheetRef.current?.expand(); // Expand the bottom sheet when a friend is selected
+    };
+
+    const handleClosePress = () =>
+    {
+        bottomSheetRef.current?.close(); // Close bottom sheet
+    };
 
     let text = 'Waiting...';
     if (errorMsg)
@@ -393,8 +437,9 @@ export default function Map()
         );
     }
 
+
     return (
-        <View style={styles.container}>
+        <GestureHandlerRootView style={styles.container}>
             <MapView
                 ref={mapRef}
                 style={styles.map}
@@ -403,16 +448,18 @@ export default function Map()
                 loadingEnabled={true}
                 provider={PROVIDER_GOOGLE}
                 customMapStyle={mapTheme}
-                showsTraffic={true}
-                onRegionChange={() => {
+                showsTraffic={!!destination}
+                onRegionChange={() =>
+                {
                     setIsUserInteracting(true);
                 }}
             >
-                {origin && (
+                {origin && destination && (
                     <MapViewDirections
                         origin={origin}
                         destination={destination}
                         apikey={GOOGLE_MAPS_APIKEY}
+                        timePrecision={'now'}
                         mode="DRIVING" // Default transport mode
                         strokeWidth={8}
                         strokeColor="#34a4eb"
@@ -426,13 +473,13 @@ export default function Map()
                         description="Your destination"
                     />
                 )}
-                {friendLocations.map((location, index) => (
+                {friendDetails.map((friend, index) => (
                     <Marker
                         key={index}
-                        coordinate={location.coords}
-                        onPress={() => console.log('Friend location:', location)}
+                        coordinate={friend.coords}
+                        onPress={() => handleFriendPress(friend as definitions.Friend)}
                     >
-                        <FriendMarker userId={location.userId}/>
+                        <FriendMarker userId={friend.userId}/>
                     </Marker>
                 ))}
             </MapView>
@@ -501,7 +548,37 @@ export default function Map()
                     </TouchableOpacity>
                 </View>
             </Modal>
-        </View>
+            <BottomSheet
+                ref={bottomSheetRef}
+                index={-1} // Start closed
+                snapPoints={['25%']}
+                onChange={(index) =>
+                {
+                    if (index === -1) setSelectedFriend(null); // Reset selected friend when closed
+                }}
+                enablePanDownToClose={true}
+            >
+                <BottomSheetView style={styles.contentContainer(theme)}>
+                    <TouchableOpacity style={styles.closeButton} onPress={handleClosePress}>
+                        <Icon name="close" size={24} color="#fff"/>
+                    </TouchableOpacity>
+                    {selectedFriend ? (
+                        <View style={styles.userContainer}>
+                            <ProfilePicture userId={selectedFriend.userId}/>
+                            <Text style={styles.userName(theme)}>{selectedFriend.username}</Text>
+                            <TouchableOpacity
+                                style={styles.chatButton}
+                                onPress={() => router.push(`/friends/chat/${selectedFriend.roomId}`)}
+                            >
+                                <Text style={styles.chatButtonText}>Start Chat</Text>
+                            </TouchableOpacity>
+                        </View>
+                    ) : (
+                        <Text style={styles.noUserText}>Select a friend to chat</Text>
+                    )}
+                </BottomSheetView>
+            </BottomSheet>
+        </GestureHandlerRootView>
     );
 }
 
@@ -611,5 +688,46 @@ const styles = StyleSheet.create({
         padding: 10,
         borderRadius: 30,
         elevation: 5,
+    },
+    contentContainer: (theme) => ({
+        flex: 1,
+        padding: 20,
+        alignItems: 'center',
+        backgroundColor: theme.colors.background,
+    }),
+    closeButton: {
+        position: 'absolute',
+        top: 10,
+        right: 10, // Move the icon to the right side
+        backgroundColor: 'transparent',
+        padding: 10,
+    },
+    userContainer: {
+        alignItems: 'center',
+        paddingVertical: 20,
+    },
+    userName: (theme) => ({
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: theme.colors.text,
+    }),
+    userLocation: {
+        fontSize: 16,
+        color: '#777',
+        marginBottom: 15,
+    },
+    chatButton: {
+        backgroundColor: '#0086d0',
+        borderRadius: 20,
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+    },
+    chatButtonText: {
+        color: '#fff',
+        fontSize: 16,
+    },
+    noUserText: {
+        fontSize: 16,
+        color: '#777',
     },
 });

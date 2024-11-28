@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Image, View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {useTheme} from "@react-navigation/native";
 
@@ -37,7 +38,11 @@ const ProfilePicture: React.FC<{ userId: string, styling?: Record<string, string
             {loading ? (
                 <ActivityIndicator size="large" color="#fff" />
             ) : profileImage ? (
-                <Image style={[styles.profileImage(theme), styling]} source={{ uri: profileImage }} />
+                <Image
+                    style={[styles.profileImage(theme), styling]}
+                    source={{ uri: profileImage }}
+                    cachePolicy="memory-disk"
+                />
             ) : (
                 <Icon name="person-circle" size={45} color="#fff" />
                 )}
@@ -51,10 +56,10 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     profileImage: (theme) => ({
-        width: 45,
-        height: 45,
-        borderRadius: 50,
-        resizeMode: 'cover',
+        width: 50,
+        height: 50,
+        borderRadius: 75,
+        contentFit: 'cover',
         borderWidth: 2,
         borderColor: theme.colors.icon,
     }),
